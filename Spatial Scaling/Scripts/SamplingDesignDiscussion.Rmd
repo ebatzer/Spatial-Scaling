@@ -1,0 +1,935 @@
+---
+title: "Sampling Characterization for Discussion"
+output:
+  html_document: default
+  html_notebook: default
+  pdf_document: default
+  root.dir: C:/Users/ebatzer/Box Sync/Eviner lab shared/Evan/Research Projects/Spatial
+    Scaling
+---
+### Quick Recap of Sampling Design
+
+Sampling took place at 3 sites:  
+- Hopland (HREC)  
+- McLaughlin (MCL)  
+- Sierra Foothill (SFREC)  
+
+At each site, four 8x8m plots were established.  
+
+Within which, there are 3 sets of nested subplots:  
+- 16 1x1m subplots 
+- 32 .5x.5m subplots  
+- 64 .25x.25m subplots  
+
+In each subplot, species percent cover was recorded, in addition to subplot spatial location.  
+
+### Proportion of species captured within each set of samples
+
+Graphs below show species-accumulation curves, that display the number of unique species encountered as a function of number of plot communities added together.  
+These figures show randomized values, in which curves are assembled using 200 unique permutations of the dataset. Each one of these curves corresponds to one 8 x 8m plot consisting of 3 different sampling scales:  
+
+- 64 .25 x .25 m plots  
+- 32 .5 x .5 m plots  
+- 16 1 x 1m plots  
+
+Data from each of the four plots in each site are shown in a different color.
+
+```{r, echo=FALSE}
+# Set working directory:
+setwd("C:/Users/Evan/Box Sync/Eviner lab shared/Evan/Research Projects/Spatial Scaling")
+
+alldata <- read.csv("SpringDataCombined.csv")
+```
+
+```{r, include = FALSE}
+library(vegan)
+library(ggplot2)
+library(reshape2)
+library(ggthemes)
+
+sem<-function(x){sd(x)/sqrt(length(x))}
+
+sitenames <- c("MCL", "SFREC", "HREC")
+scales <- c(.25,.5,1)
+fulldat <- list()
+counter <- 1
+
+meandiv <- c()
+meanrich <- c()
+meanbeta <- c()
+plotdiv_dat <- list()
+
+for(sites in sitenames){
+  
+  dat <- subset(alldata, Site == sites)
+  
+  for(scale in scales){
+    
+    sub_dat <- subset(dat, SubplotRes == scale)
+    sub_dat$PlotNo
+    graphdata <- data.frame(plots = c(1:nrow(sub_dat[sub_dat$SiteNo == 1,])))
+    
+    plotdiv <- list()
+    
+    for(plots in unique(sub_dat$SiteNo)){
+          graphdata <- cbind(graphdata, specaccum(sub_dat[
+            sub_dat$SiteNo == plots,
+            10:length(colnames(sub_dat))
+            ], method = "random", permutations = 200)$richness)
+          colnames(graphdata)[length(graphdata)] <- paste("Plot", plots)
+
+          meandiv <- mean(diversity(sub_dat[
+            sub_dat$SiteNo == plots,
+            10:length(colnames(sub_dat))
+            ], index = 'shannon'))
+          
+          sddiv <- sem(diversity(sub_dat[
+            sub_dat$SiteNo == plots,
+            10:length(colnames(sub_dat))
+            ], index = 'shannon'))
+          
+          meanrich <- mean(specnumber(sub_dat[
+            sub_dat$SiteNo == plots,
+            10:length(colnames(sub_dat))
+            ]))
+          
+          sdrich <- sem(specnumber(sub_dat[
+            sub_dat$SiteNo == plots,
+            10:length(colnames(sub_dat))
+            ]))
+          
+          meanbeta <- mean(vegdist(sub_dat[
+            sub_dat$SiteNo == plots,
+            10:length(colnames(sub_dat))
+            ], method = 'bray'))
+          
+          sdbeta <- sem(vegdist(sub_dat[
+            sub_dat$SiteNo == plots,
+            10:length(colnames(sub_dat))
+            ], method = 'bray'))
+          
+          plotdiv[[plots]] <- c(sites, 
+                                plots, 
+                                scale, 
+                                meandiv, 
+                                sddiv, 
+                                meanrich, 
+                                sdrich,
+                                meanbeta,
+                                sdbeta)
+
+    }
+    
+    graphdata <- melt(graphdata, id.vars = "plots", variable.name = "plot", value.name = "richness")
+    graphdata <- cbind(graphdata, scale = rep(scale, nrow(graphdata)))
+    graphdata <- cbind(graphdata, site = rep(sites, nrow(graphdata)))
+    
+    fulldat[[counter]] <- graphdata
+    
+    plotdiv_dat[[counter]] <- plotdiv
+  
+    counter <- counter + 1
+  }
+}
+
+mcldat <- rbind(fulldat[[1]], fulldat[[2]], fulldat[[3]])
+sfrecdat <- rbind(fulldat[[4]], fulldat[[5]], fulldat[[6]])
+hrecdat <- rbind(fulldat[[7]], fulldat[[8]], fulldat[[9]])
+
+
+divsummary <- matrix(unlist(plotdiv_dat), ncol=9, byrow=T)
+colnames(divsummary) <- c("site", "plotno","scale", 
+                          "meandiv","sddiv", 
+                          "meanrich","sdrich",
+                          "meanbeta","sdbeta")
+
+```
+
+```{r, echo=F}
+
+  ggplot(aes(x = plots, y = richness, color = plot), data = mcldat) + 
+    geom_line() +
+    theme_fivethirtyeight() +
+    ggtitle(paste(unique(mcldat$site), "SAR as a function of no. plots sampled")) +
+    facet_wrap(~scale, scales = 'free_x') +
+    ylim(0,45)
+
+```
+
+```{r, echo=F}
+
+  ggplot(aes(x = plots , y = richness, color = plot), data = sfrecdat) + 
+    geom_line() +
+    theme_fivethirtyeight() + 
+        ggtitle(paste(unique(sfrecdat$site), "SAR as a function of no. plots  sampled")) +
+    facet_wrap(~scale, scales = 'free_x') +
+    ylim(0,45)
+
+```
+
+```{r, echo=F}
+
+  ggplot(aes(x = plots, y = richness, color = plot), data = hrecdat) + 
+    geom_line() +
+    theme_fivethirtyeight() + 
+    ggtitle(paste(unique(hrecdat$site), "SAR as a function of no. plots sampled")) +
+    facet_wrap(~scale, scales = 'free_x') +
+    ylim(0,45)
+
+```
+
+
+In general, it seems that plots contain relatively similar numbers of species, though Hopland stands out as having a higher-diversity and lower-diversity plot. This, in part, may highlight that the species-area-curve isn't a great method of highlighting differences in community composition between plots--these differences in curves could have arisen just due to single individuals of a rare species being present in one plot and not the other, though overall species abundance distributions between the two plots are relatively similar.  
+
+It is very interesting to note that curves appear to asymptote at roughly the same point across all sampling scales, even though 64 .25 x .25m plots incorporate only 4 m^2 of total sampling area, while the 16 1 x 1m subplots capture 4 times the area (16m^2).  
+
+What this result would suggest to me is that diversity is not distributed evenly in plots, across all sites. If that were the case, smaller scale sampling would only represent a fraction of the diversity accumulated in larger scale sampling. However, widely dispersed plots capture more species than a single plot of equivalent area: 16 .25 x .25m plots contain more species than a single 1 x 1m plot does, on average.
+
+However, there also seem to be opportunities to sample more completely. I think that, ideally, these curves should begin to asymptote more strongly than they do currently. I would suggest that increasing replication of the number of plots per site is important.
+
+### Plot Diversity Statistics
+
+Below are figures that show some general diversity statistics of different sampling scales at the three sites. This analysis was suggested by some more old-school experimental design textbooks that discuss the relationship between plot size, time to sample, and standard deviation of these measurements.  
+
+In these figures, a diversity statistic is shown with its 95% confidence interval, colored and labelled by site name, with the plot scale (.25 x .25, .5 x .5, or 1 x 1) on the x-axis.
+
+```{r, include = F}
+
+divsummary <- data.frame(divsummary)
+divsummary$meanrich <- as.numeric(levels(divsummary$meanrich))[divsummary$meanrich]
+divsummary$meanbeta <- as.numeric(levels(divsummary$meanbeta))[divsummary$meanbeta]
+divsummary$meandiv <- as.numeric(levels(divsummary$meandiv))[divsummary$meandiv]
+divsummary$sdrich <- as.numeric(levels(divsummary$sdrich))[divsummary$sdrich]
+divsummary$sdbeta <- as.numeric(levels(divsummary$sdbeta))[divsummary$sdbeta]
+divsummary$sddiv <- as.numeric(levels(divsummary$sddiv))[divsummary$sddiv]
+divsummary$scale <- as.numeric(levels(divsummary$scale))[divsummary$scale]
+divsummary$site <- divsummary$site[order(divsummary$site)]
+
+```
+
+#### Mean Species Richness Per Plot  
+```{r, echo=F}
+dodge <- position_dodge(width = .3)
+ggplot(aes(y=meanrich, x=as.factor(scale), color=site, group = plotno), data=divsummary) + 
+  geom_point(position = dodge) +
+  geom_errorbar(aes(ymin = divsummary$meanrich - 2 * divsummary$sdrich, 
+                    ymax = divsummary$meanrich + 2 * divsummary$sdrich,
+                    color = divsummary$site,
+                    group = divsummary$plotno), 
+                width = .2, position = dodge) +
+  facet_wrap(~site) + 
+  theme_fivethirtyeight() + 
+  ggtitle("Mean Species Richness +/- 95% CI") +
+  ylim(0,25)
+
+```
+
+The patterns that jump out with respect to raw species richness per plot don't seem to be that informative. In all sites, the largest sampling scales have the most variation in the total number of species captured, which I think is the expected result. I was looking for some evidence that smaller scales become too variable here, but didn't seem to find that.
+
+#### Mean Shannon Diversity Per Plot  
+```{r, echo=F}
+dodge <- position_dodge(width = .3)
+ggplot(aes(y=meandiv, x=as.factor(scale), color=site, group = plotno), data=divsummary) + 
+  geom_point(position = dodge) +
+  geom_errorbar(aes(ymin = divsummary$meandiv - 2 * divsummary$sddiv, 
+                    ymax = divsummary$meandiv + 2 * divsummary$sddiv, 
+                    color = divsummary$site,
+                    group = divsummary$plotno), 
+                width = .2, position = dodge) +
+  facet_wrap(~site)+ 
+  theme_fivethirtyeight() + 
+  ggtitle("Mean Shannon Diversity +/- 95% CI") +
+  ylim(1,3)
+```
+
+Mean shannon diversity per plot is similar to the above. We see a positive relationship between diversity weighted by evenness and sampling area, which again, is probably the expected result. 
+
+#### Mean Beta Diversity (Bray-Curtis Dissimilarity) Between Plots  
+```{r, echo=F}
+dodge <- position_dodge(width = .3)
+ggplot(aes(y=meanbeta, x=as.factor(scale), color=site, group = plotno), data=divsummary) + 
+  geom_point(position = dodge) +
+   geom_errorbar(aes(ymin = divsummary$meanbeta - 2 * divsummary$sdbeta, 
+                    ymax = divsummary$meanbeta + 2 * divsummary$sdbeta,
+                    color = divsummary$site,
+                    group = divsummary$plotno), 
+                width = .2, position = dodge) +
+  facet_wrap(~site)+ 
+  theme_fivethirtyeight() + 
+  ggtitle("Mean Bray-Curtis Dissimilarity +/- 95% CI") +
+  ylim(0,1)
+
+```
+
+And again, it appears that plots become more dissimilar to one another, on average, if we take smaller samples. While all three of these statistics appear to show good baselines for future comparison, I haven't found them particularly informative for this decision-making process.
+
+### Mantel Correlation with Bray-Curtis Dissimilarity
+
+Perhaps the most informative data to this process might be Mantel correlation plots, which show the dissimilarity between plot communities as a function of their space. In this test, pairs of plots are compared using a dissimilarity metric (in this case, Bray-Curtis or Jaccard dissimilarity). This matrix of paired plot comparisons is then supplemented by a second matrix consisting of the euclidian distance between the physical location of plots. Observations are segmented into different binned distance classes, then the average dissimilarity of plots within each class is compared to the mean level of dissimilairty observed among all samples.   
+
+These graphs below show similarity in community composition between different plots on the y-axis, on a scale of -1 to 1. Communities closer to 1 are more similar to each other than the average (0), while communities that are closer to -1 are more dissimilar than the average. On the x-axis is the distance between plot pairs, ranging from 0 to 10m. These distance classes are segmented into segments equal to the width of sample unit--.25, .5, or 1m.  
+
+Each point represents the mean Mantel correlation value for a given plot's set of sampling quadrats that fall into a given distance class. Because there are 4 plots per site, 4 points are present in each distance class. Different graphs represent different sampling subplot scales, labelled at the top of each graph.  
+
+Points are colored by significance. Points that are filled in yellow represent statistically significant deviations from the mean dissimilarity at a p-value of .05 or less, while purple points are not statistically significant.  
+
+```{r, echo=F, message=F}
+setwd("C:/Users/Evan/Box Sync/Eviner lab shared/Evan/Research Projects/Spatial Scaling")
+
+# Calling necessary packages
+library(vegan)
+library(ggplot2)
+library(viridis)
+
+# Reading in plot coordinates:
+coords <- read.csv("Plot Coordinates.csv")
+
+# Establishing plot midpoints using coordinates
+coords$xmid <- rowSums(coords[,6:9]) / 4
+coords$ymid <- rowSums(coords[,10:13]) / 4
+
+```
+
+```{r, echo = F, message=F, warning=FALSE}
+
+##### Generating betadisp ~ lag distance figures #####
+
+scales <- c(.25,.5,1)
+counter <- 1
+
+somedata <- alldata[alldata$Site == "MCL",]
+
+for( siteval in c(1:4)){
+  coverdata <- somedata[somedata$SiteNo == siteval,]
+  somecoords <- coords[coords$site == siteval,]
+  
+  for( scaleval in scales){
+    
+    # Subsets for a given scale value
+    coords.sample <- subset(somecoords,  scale == scaleval)
+    cov.sample <- subset(coverdata, SubplotRes == scaleval)
+    
+    coords.sample <- coords.sample[order(coords.sample$row),]
+    cov.sample <- cov.sample[order(cov.sample$Row),]
+
+    # Renames columns for merge
+    plotdat <- cbind(cov.sample, coords.sample[, 14:15])
+    plotdat[is.na(plotdat)] <- 0
+    
+    vd <- vegdist(plotdat[,10:ncol(cov.sample)], na.rm=T, method="bray")
+    xy <- dist(plotdat[,c((ncol(plotdat)-1) : ncol(plotdat))])
+    
+    if(counter == 1){
+    
+      betadat <- data.frame(dissimilarity = c(vd),
+                            coord = c(xy),
+                            scale = rep(scaleval, length(vd)),
+                            site = rep(unique(plotdat$Site), length(vd)),
+                            plot = rep(siteval, length(vd)))
+      
+    }
+    if(counter > 1){
+      
+      betadat <- rbind(betadat,
+                      data.frame(dissimilarity = c(vd),
+                                 coord = c(xy),
+                                 scale = rep(scaleval, length(vd)),
+                                 site = rep(unique(plotdat$Site), length(vd)),
+                                 plot = rep(siteval, length(vd)))
+                      )
+      
+    }
+    
+    if(counter == 1){
+    
+    mtest <- mantel.correlog(D.eco = vd, 
+                             D.geo = xy, 
+                             break.pts = seq(0, 10, by=scaleval), 
+                             cutoff = F)
+    
+    mandat <- data.frame(mtest$mantel.res, 
+                         scale=rep(scaleval, mtest$n.class),
+                         site = rep(unique(plotdat$Site), mtest$n.class),
+                         plot = rep(siteval, mtest$n.class))
+    
+    }
+    
+    if(counter > 1){
+      mtest <- mantel.correlog(D.eco = vd, 
+                               D.geo = xy, 
+                               break.pts = seq(0, 10, by=scaleval), 
+                               cutoff = F)
+      
+      mandat <- rbind(mandat,
+                      data.frame(mtest$mantel.res, 
+                           scale=rep(scaleval, mtest$n.class),
+                           site = rep(unique(plotdat$Site), mtest$n.class),
+                           plot = rep(siteval, mtest$n.class)
+                           ))
+      
+    }
+    
+    counter <- counter + 1
+  }
+}
+
+
+
+p1 <- ggplot(aes(x= class.index, 
+                 y= Mantel.cor, 
+                 color=Pr.corrected. < .05), 
+             data=mandat)
+
+p1 +
+  geom_point( size=3, aes(color=NULL))+
+  geom_point( size=2)+
+  #geom_line(aes(color = NULL)) + 
+  geom_smooth(method=lm, formula = y ~ x + I(x^2), aes(color = NULL))+
+  ggtitle(paste(unique(mandat$site), "Mantel Correlation")) +
+  xlab("Lag Distance") +
+  ylab("Mantel Correlation") +
+  facet_wrap(~scale) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_color_viridis(discrete = T)
+```
+
+```{r, echo = F, message=F, warning=FALSE}
+
+##### Generating betadisp ~ lag distance figures #####
+
+scales <- c(.25,.5,1)
+counter <- 1
+
+somedata <- alldata[alldata$Site == "HREC",]
+
+for( siteval in c(1:4)){
+  coverdata <- somedata[somedata$SiteNo == siteval,]
+  somecoords <- coords[coords$site == siteval,]
+  
+  for( scaleval in scales){
+    
+    # Subsets for a given scale value
+    coords.sample <- subset(somecoords,  scale == scaleval)
+    cov.sample <- subset(coverdata, SubplotRes == scaleval)
+    
+    coords.sample <- coords.sample[order(coords.sample$row),]
+    cov.sample <- cov.sample[order(cov.sample$Row),]
+
+    # Renames columns for merge
+    plotdat <- cbind(cov.sample, coords.sample[, 14:15])
+    plotdat[is.na(plotdat)] <- 0
+    
+    vd <- vegdist(plotdat[,10:ncol(cov.sample)], na.rm=T, method="bray")
+    xy <- dist(plotdat[,c((ncol(plotdat)-1) : ncol(plotdat))])
+    
+    if(counter == 1){
+    
+      betadat <- data.frame(dissimilarity = c(vd),
+                            coord = c(xy),
+                            scale = rep(scaleval, length(vd)),
+                            site = rep(unique(plotdat$Site), length(vd)),
+                            plot = rep(siteval, length(vd)))
+      
+    }
+    if(counter > 1){
+      
+      betadat <- rbind(betadat,
+                      data.frame(dissimilarity = c(vd),
+                                 coord = c(xy),
+                                 scale = rep(scaleval, length(vd)),
+                                 site = rep(unique(plotdat$Site), length(vd)),
+                                 plot = rep(siteval, length(vd)))
+                      )
+      
+    }
+    
+    if(counter == 1){
+    
+    mtest <- mantel.correlog(D.eco = vd, 
+                             D.geo = xy, 
+                             break.pts = seq(0, 10, by=scaleval), 
+                             cutoff = F)
+    
+    mandat <- data.frame(mtest$mantel.res, 
+                         scale=rep(scaleval, mtest$n.class),
+                         site = rep(unique(plotdat$Site), mtest$n.class),
+                         plot = rep(siteval, mtest$n.class))
+    
+    }
+    
+    if(counter > 1){
+      mtest <- mantel.correlog(D.eco = vd, 
+                               D.geo = xy, 
+                               break.pts = seq(0, 10, by=scaleval), 
+                               cutoff = F)
+      
+      mandat <- rbind(mandat,
+                      data.frame(mtest$mantel.res, 
+                           scale=rep(scaleval, mtest$n.class),
+                           site = rep(unique(plotdat$Site), mtest$n.class),
+                           plot = rep(siteval, mtest$n.class)
+                           ))
+      
+    }
+    
+    counter <- counter + 1
+  }
+}
+
+
+
+p1 <- ggplot(aes(x= class.index, 
+                 y= Mantel.cor, 
+                 color=Pr.corrected. < .05), 
+             data=mandat)
+
+p1 +
+  geom_point( size=3, aes(color=NULL))+
+  geom_point( size=2)+
+  #geom_line(aes(color = NULL)) + 
+  geom_smooth(method=lm, formula = y ~ x + I(x^2), aes(color = NULL))+
+  ggtitle(paste(unique(mandat$site), "Mantel Correlation")) +
+  xlab("Lag Distance") +
+  ylab("Mantel Correlation") +
+  facet_wrap(~scale) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_color_viridis(discrete = T)
+```
+
+```{r, echo = F, message=F, warning=FALSE}
+
+##### Generating betadisp ~ lag distance figures #####
+
+scales <- c(.25,.5,1)
+counter <- 1
+
+somedata <- alldata[alldata$Site == "SFREC",]
+
+for( siteval in c(1:4)){
+  coverdata <- somedata[somedata$SiteNo == siteval,]
+  somecoords <- coords[coords$site == siteval,]
+  
+  for( scaleval in scales){
+    
+    # Subsets for a given scale value
+    coords.sample <- subset(somecoords,  scale == scaleval)
+    cov.sample <- subset(coverdata, SubplotRes == scaleval)
+    
+    coords.sample <- coords.sample[order(coords.sample$row),]
+    cov.sample <- cov.sample[order(cov.sample$Row),]
+
+    # Renames columns for merge
+    plotdat <- cbind(cov.sample, coords.sample[, 14:15])
+    plotdat[is.na(plotdat)] <- 0
+    
+    vd <- vegdist(plotdat[,10:ncol(cov.sample)], na.rm=T, method="bray")
+    xy <- dist(plotdat[,c((ncol(plotdat)-1) : ncol(plotdat))])
+    
+    if(counter == 1){
+    
+      betadat <- data.frame(dissimilarity = c(vd),
+                            coord = c(xy),
+                            scale = rep(scaleval, length(vd)),
+                            site = rep(unique(plotdat$Site), length(vd)),
+                            plot = rep(siteval, length(vd)))
+      
+    }
+    if(counter > 1){
+      
+      betadat <- rbind(betadat,
+                      data.frame(dissimilarity = c(vd),
+                                 coord = c(xy),
+                                 scale = rep(scaleval, length(vd)),
+                                 site = rep(unique(plotdat$Site), length(vd)),
+                                 plot = rep(siteval, length(vd)))
+                      )
+      
+    }
+    
+    if(counter == 1){
+    
+    mtest <- mantel.correlog(D.eco = vd, 
+                             D.geo = xy, 
+                             break.pts = seq(0, 10, by=scaleval), 
+                             cutoff = F)
+    
+    mandat <- data.frame(mtest$mantel.res, 
+                         scale=rep(scaleval, mtest$n.class),
+                         site = rep(unique(plotdat$Site), mtest$n.class),
+                         plot = rep(siteval, mtest$n.class))
+    
+    }
+    
+    if(counter > 1){
+      mtest <- mantel.correlog(D.eco = vd, 
+                               D.geo = xy, 
+                               break.pts = seq(0, 10, by=scaleval), 
+                               cutoff = F)
+      
+      mandat <- rbind(mandat,
+                      data.frame(mtest$mantel.res, 
+                           scale=rep(scaleval, mtest$n.class),
+                           site = rep(unique(plotdat$Site), mtest$n.class),
+                           plot = rep(siteval, mtest$n.class)
+                           ))
+      
+    }
+    
+    counter <- counter + 1
+  }
+}
+
+
+
+p1 <- ggplot(aes(x= class.index, 
+                 y= Mantel.cor, 
+                 color=Pr.corrected. < .05), 
+             data=mandat)
+
+p1 +
+  geom_point( size=3, aes(color=NULL))+
+  geom_point( size=2)+
+  #geom_line(aes(color = NULL)) + 
+  geom_smooth(method=lm, formula = y ~ x + I(x^2), aes(color = NULL))+
+  ggtitle(paste(unique(mandat$site), "Mantel Correlation")) +
+  xlab("Lag Distance") +
+  ylab("Mantel Correlation") +
+  facet_wrap(~scale) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_color_viridis(discrete = T)
+```
+
+While there was some expectation that different sampling scales would reveal different patterns of spatial aggregation, these figures suggest that all three sampling plot scales detect similar spatial variation in community structure. In general, it appears that spatial clustering to a distance of roughly 2-3 meters is present in all communities, with some variation--McLaughlin appears to have more detectable aggregation than Hopland, for example.  
+
+Though different sampling scales don't appear to vary in what spatial patterns they pick up, their sensitivity to this pattern is different. In general, it appears that .5 x .5m plots and 1 x 1m plots detect local spatial aggregation more strongly, though are limited particularly at longer distances due to the smaller number of plots incorporated in sampling. 
+
+To me, this suggests that I have difficulty picking up very fine-scale spatial variation using these different sampling units. It may be possible to parse out more of this fine variation with a very small sampling plot, but may miss out a lot of the overall community diversity.  
+
+### Mantel Correlation with Jaccard Dissimilarity
+
+Repeating the same test using Jaccard dissimilarity--only accounts for species presence/absence, does not incorporate abundance. Appears to show a fairly similar pattern.
+
+```{r, echo = F, message=F, warning=FALSE}
+
+##### Generating betadisp ~ lag distance figures #####
+
+scales <- c(.25,.5,1)
+counter <- 1
+
+somedata <- alldata[alldata$Site == "MCL",]
+
+for( siteval in c(1:4)){
+  coverdata <- somedata[somedata$SiteNo == siteval,]
+  somecoords <- coords[coords$site == siteval,]
+  
+  for( scaleval in scales){
+    
+    # Subsets for a given scale value
+    coords.sample <- subset(somecoords,  scale == scaleval)
+    cov.sample <- subset(coverdata, SubplotRes == scaleval)
+    
+    coords.sample <- coords.sample[order(coords.sample$row),]
+    cov.sample <- cov.sample[order(cov.sample$Row),]
+
+    # Renames columns for merge
+    plotdat <- cbind(cov.sample, coords.sample[, 14:15])
+    plotdat[is.na(plotdat)] <- 0
+    
+    vd <- vegdist(plotdat[,10:ncol(cov.sample)], na.rm=T, method="jaccard")
+    xy <- dist(plotdat[,c((ncol(plotdat)-1) : ncol(plotdat))])
+    
+    if(counter == 1){
+    
+      betadat <- data.frame(dissimilarity = c(vd),
+                            coord = c(xy),
+                            scale = rep(scaleval, length(vd)),
+                            site = rep(unique(plotdat$Site), length(vd)),
+                            plot = rep(siteval, length(vd)))
+      
+    }
+    if(counter > 1){
+      
+      betadat <- rbind(betadat,
+                      data.frame(dissimilarity = c(vd),
+                                 coord = c(xy),
+                                 scale = rep(scaleval, length(vd)),
+                                 site = rep(unique(plotdat$Site), length(vd)),
+                                 plot = rep(siteval, length(vd)))
+                      )
+      
+    }
+    
+    if(counter == 1){
+    
+    mtest <- mantel.correlog(D.eco = vd, 
+                             D.geo = xy, 
+                             break.pts = seq(0, 10, by=scaleval), 
+                             cutoff = F)
+    
+    mandat <- data.frame(mtest$mantel.res, 
+                         scale=rep(scaleval, mtest$n.class),
+                         site = rep(unique(plotdat$Site), mtest$n.class),
+                         plot = rep(siteval, mtest$n.class))
+    
+    }
+    
+    if(counter > 1){
+      mtest <- mantel.correlog(D.eco = vd, 
+                               D.geo = xy, 
+                               break.pts = seq(0, 10, by=scaleval), 
+                               cutoff = F)
+      
+      mandat <- rbind(mandat,
+                      data.frame(mtest$mantel.res, 
+                           scale=rep(scaleval, mtest$n.class),
+                           site = rep(unique(plotdat$Site), mtest$n.class),
+                           plot = rep(siteval, mtest$n.class)
+                           ))
+      
+    }
+    
+    counter <- counter + 1
+  }
+}
+
+
+p1 <- ggplot(aes(x= class.index, 
+                 y= Mantel.cor, 
+                 color=Pr.corrected. < .05), 
+             data=mandat)
+
+p1 +
+  geom_point( size=3, aes(color=NULL))+
+  geom_point( size=2)+
+  #geom_line(aes(color = NULL)) + 
+  geom_smooth(method=lm, formula = y ~ x + I(x^2), aes(color = NULL))+
+  ggtitle(paste(unique(mandat$site), "Mantel Correlation")) +
+  xlab("Lag Distance") +
+  ylab("Mantel Correlation") +
+  facet_wrap(~scale) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_color_viridis(discrete = T)
+```
+
+```{r, echo = F, message=F, warning=FALSE}
+
+##### Generating betadisp ~ lag distance figures #####
+
+scales <- c(.25,.5,1)
+counter <- 1
+
+somedata <- alldata[alldata$Site == "HREC",]
+
+for( siteval in c(1:4)){
+  coverdata <- somedata[somedata$SiteNo == siteval,]
+  somecoords <- coords[coords$site == siteval,]
+  
+  for( scaleval in scales){
+    
+    # Subsets for a given scale value
+    coords.sample <- subset(somecoords,  scale == scaleval)
+    cov.sample <- subset(coverdata, SubplotRes == scaleval)
+    
+    coords.sample <- coords.sample[order(coords.sample$row),]
+    cov.sample <- cov.sample[order(cov.sample$Row),]
+
+    # Renames columns for merge
+    plotdat <- cbind(cov.sample, coords.sample[, 14:15])
+    plotdat[is.na(plotdat)] <- 0
+    
+    vd <- vegdist(plotdat[,10:ncol(cov.sample)], na.rm=T, method="jaccard")
+    xy <- dist(plotdat[,c((ncol(plotdat)-1) : ncol(plotdat))])
+    
+    if(counter == 1){
+    
+      betadat <- data.frame(dissimilarity = c(vd),
+                            coord = c(xy),
+                            scale = rep(scaleval, length(vd)),
+                            site = rep(unique(plotdat$Site), length(vd)),
+                            plot = rep(siteval, length(vd)))
+      
+    }
+    if(counter > 1){
+      
+      betadat <- rbind(betadat,
+                      data.frame(dissimilarity = c(vd),
+                                 coord = c(xy),
+                                 scale = rep(scaleval, length(vd)),
+                                 site = rep(unique(plotdat$Site), length(vd)),
+                                 plot = rep(siteval, length(vd)))
+                      )
+      
+    }
+    
+    if(counter == 1){
+    
+    mtest <- mantel.correlog(D.eco = vd, 
+                             D.geo = xy, 
+                             break.pts = seq(0, 10, by=scaleval), 
+                             cutoff = F)
+    
+    mandat <- data.frame(mtest$mantel.res, 
+                         scale=rep(scaleval, mtest$n.class),
+                         site = rep(unique(plotdat$Site), mtest$n.class),
+                         plot = rep(siteval, mtest$n.class))
+    
+    }
+    
+    if(counter > 1){
+      mtest <- mantel.correlog(D.eco = vd, 
+                               D.geo = xy, 
+                               break.pts = seq(0, 10, by=scaleval), 
+                               cutoff = F)
+      
+      mandat <- rbind(mandat,
+                      data.frame(mtest$mantel.res, 
+                           scale=rep(scaleval, mtest$n.class),
+                           site = rep(unique(plotdat$Site), mtest$n.class),
+                           plot = rep(siteval, mtest$n.class)
+                           ))
+      
+    }
+    
+    counter <- counter + 1
+  }
+}
+
+
+
+p1 <- ggplot(aes(x= class.index, 
+                 y= Mantel.cor, 
+                 color=Pr.corrected. < .05), 
+             data=mandat)
+
+p1 +
+  geom_point( size=3, aes(color=NULL))+
+  geom_point( size=2)+
+  #geom_line(aes(color = NULL)) + 
+  geom_smooth(method=lm, formula = y ~ x + I(x^2), aes(color = NULL))+
+  ggtitle(paste(unique(mandat$site), "Mantel Correlation")) +
+  xlab("Lag Distance") +
+  ylab("Mantel Correlation") +
+  facet_wrap(~scale) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_color_viridis(discrete = T)
+```
+
+```{r, echo = F, message=F, warning=FALSE}
+
+##### Generating betadisp ~ lag distance figures #####
+
+scales <- c(.25,.5,1)
+counter <- 1
+
+somedata <- alldata[alldata$Site == "SFREC",]
+
+for( siteval in c(1:4)){
+  coverdata <- somedata[somedata$SiteNo == siteval,]
+  somecoords <- coords[coords$site == siteval,]
+  
+  for( scaleval in scales){
+    
+    # Subsets for a given scale value
+    coords.sample <- subset(somecoords,  scale == scaleval)
+    cov.sample <- subset(coverdata, SubplotRes == scaleval)
+    
+    coords.sample <- coords.sample[order(coords.sample$row),]
+    cov.sample <- cov.sample[order(cov.sample$Row),]
+
+    # Renames columns for merge
+    plotdat <- cbind(cov.sample, coords.sample[, 14:15])
+    plotdat[is.na(plotdat)] <- 0
+    
+    vd <- vegdist(plotdat[,10:ncol(cov.sample)], na.rm=T, method="jaccard")
+    xy <- dist(plotdat[,c((ncol(plotdat)-1) : ncol(plotdat))])
+    
+    if(counter == 1){
+    
+      betadat <- data.frame(dissimilarity = c(vd),
+                            coord = c(xy),
+                            scale = rep(scaleval, length(vd)),
+                            site = rep(unique(plotdat$Site), length(vd)),
+                            plot = rep(siteval, length(vd)))
+      
+    }
+    if(counter > 1){
+      
+      betadat <- rbind(betadat,
+                      data.frame(dissimilarity = c(vd),
+                                 coord = c(xy),
+                                 scale = rep(scaleval, length(vd)),
+                                 site = rep(unique(plotdat$Site), length(vd)),
+                                 plot = rep(siteval, length(vd)))
+                      )
+      
+    }
+    
+    if(counter == 1){
+    
+    mtest <- mantel.correlog(D.eco = vd, 
+                             D.geo = xy, 
+                             break.pts = seq(0, 10, by=scaleval), 
+                             cutoff = F)
+    
+    mandat <- data.frame(mtest$mantel.res, 
+                         scale=rep(scaleval, mtest$n.class),
+                         site = rep(unique(plotdat$Site), mtest$n.class),
+                         plot = rep(siteval, mtest$n.class))
+    
+    }
+    
+    if(counter > 1){
+      mtest <- mantel.correlog(D.eco = vd, 
+                               D.geo = xy, 
+                               break.pts = seq(0, 10, by=scaleval), 
+                               cutoff = F)
+      
+      mandat <- rbind(mandat,
+                      data.frame(mtest$mantel.res, 
+                           scale=rep(scaleval, mtest$n.class),
+                           site = rep(unique(plotdat$Site), mtest$n.class),
+                           plot = rep(siteval, mtest$n.class)
+                           ))
+      
+    }
+    
+    counter <- counter + 1
+  }
+}
+
+
+
+p1 <- ggplot(aes(x= class.index, 
+                 y= Mantel.cor, 
+                 color=Pr.corrected. < .05), 
+             data=mandat)
+
+p1 +
+  geom_point( size=3, aes(color=NULL))+
+  geom_point( size=2)+
+  #geom_line(aes(color = NULL)) + 
+  geom_smooth(method=lm, formula = y ~ x + I(x^2), aes(color = NULL))+
+  ggtitle(paste(unique(mandat$site), "Mantel Correlation")) +
+  xlab("Lag Distance") +
+  ylab("Mantel Correlation") +
+  facet_wrap(~scale) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_color_viridis(discrete = T)
+```
+
+
+## Final Recommendation
+
+Based on statistical concerns and the output of this analysis, I think that a 64 sampling subplots per 8m x 8m plot, 50cm x 50cm in size, and spaced in regular 1m intervals might be the most effective.  
+
+With respect to sampling frequency, 64 seems like a good number. 50 samples is a suggested value for many statistical tests, and should effectively estimate overall diversity in each community.  
+
+As for plot size, I think that a 50cm x 50cm plot is a middle-of-the-road solution that both allows for a fairly substantial area of each community to be sampled, yet still provides adequate variability for spatial sampling. Given the current shape of our species accumulation curves, this doubling in sampling frequency at the intermediate scale should show formation of a more substantial asymptote.  
+
+The 50cm x 50cm sampling subplot did a good job of capturing community spatial structure in each site. This intermediate subplot value was not so small and variable as to potentially obscure spatial patterning, but was not too insensitive either. Its size also permits more replication within each 8 x 8m plot that is not possible with a 1m x 1m sampling subplot. 
+
+Given the distance of detectable spatial autocorrelation shown in Mantel correlograms, I think a regular sampling scheme may provide more information than randomized sampling. I think a randomized scheme is most valuable when patches in the landscape are small and variable in composition, which can be better evaluated at the expense of potentially missing some of the total variation in the overall plot through clustering of sampling units.  
+
+If there is an average patch size of roughly 2.5m in these communities, sampling at a 1m frequency should place multiple subplots within each patch, satisfying some of the concerns of Fortin and Dale. While fine-scale patches may still be missed, I think this analysis suggests that a lot of the spatial structuring we see in these communities occurs at a scale larger than an individual plot. A more regular spatial pattern is likely to capture more of this overall spatial variation, avoiding some potential redundance in information produced by clustered subplots.
+
+
