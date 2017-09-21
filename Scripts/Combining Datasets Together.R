@@ -68,14 +68,34 @@ expect_true(unique(names(late.ids) %in% names(mid.ids)))
 # Specifying series of columns to be ordered by (slowest-varying to fastest)
 id.order <- c("Site", "Block", "Plot", "SubplotRes", "SubplotNo")
 
-com.id1 <- late.ids
-com.id2 <- mid.ids
-com.matrix1 <- late.com
-com.matrix2 <- mid.com
+com.id1 <- cbind(index = c(1:nrow(late.ids)), late.ids)
+com.id2 <- cbind(index = c(1:nrow(mid.ids)), mid.ids)
+com.matrix1 <- cbind(index = c(1:nrow(late.com)), late.com)
+com.matrix2 <- cbind(index = c(1:nrow(mid.com)), mid.com)
+
 
 # Merging together
-newmat <- merge_by_cover(com.matrix1 = com.matrix1,
-                         com.matrix2 = com.matrix2,
-                         com.id1 = com.id1,
-                         com.id2 = com.id2,
+newmat <- merge_by_cover(com.matrix1 = com.matrix1[,-1],
+                         com.matrix2 = com.matrix2[,-1],
+                         com.id1 = com.id1[,-1],
+                         com.id2 = com.id2[,-1],
                          id.order = id.order)
+
+newmat <- cbind(index = c(1:nrow(newmat)), newmat)
+
+# Adding in spatial data
+spatdat <- read.csv("./2016/plot coordinates.csv")
+head(spatdat)
+names(spatdat)[2:5] <- c("Block", "Plot", "SubplotNo", "SubplotRes")
+spatdat <- spatdat[,-1]
+
+# Merging with ID dataframe
+com.id1 <- merge(com.id1, spatdat, all.x = TRUE)
+com.id1 <- com.id1[order(com.id1$index),]
+
+# Writing CSVs
+write.csv(x = newmat,
+          "./2016/alldatacombined2016.csv", row.names = F)
+
+write.csv(x = com.id1,
+          "./2016/alldataidentification2016.csv", row.names = F)
