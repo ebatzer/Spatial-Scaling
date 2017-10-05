@@ -1,11 +1,12 @@
-
 jost_specaccum <- function(com.data, # Community data
                            com.ids, # Community ids
-                           n.perm, # Number of permutations
+                           n.perm, # Number of permutations, ignored for "spatial"
                            q.value, # Jost diversity level
-                           spatial.columns # Columns used to designate X and Y coordinates of data
+                           spatial.columns, # Columns used to designate X and Y coordinates of data
+                           accumulation.order # How are samples accumulated? Can be "random" or "spatial"
                            ){
 
+  # Requires vegetarian to do Jost diversity calculations
   require(vegetarian)
 
   # Initializing output list
@@ -19,24 +20,49 @@ jost_specaccum <- function(com.data, # Community data
   
   sample.id <- c()
   divstore <- list()
+  distance.means <- list()
+  
+  # Runs all combinations for spatial data
+  if(accumulation.order == "spatial"){
+    n.perm <- nrow(com.data)
+    print("Ignoring n.perm argument with spatial accumulation")
+    starts <- c(sample(1:nrow(com.data), nrow(com.data), replace = F))
+  }
 
   # For a given number of permutations
   for(permno in 1:n.perm){
     
+    # Add new elements for storage
     divstore <- c(divstore, NA)
+    distance.means <- c(distance.means, NA)
     
-    # Grab a row value from the dataset
-    startval <- sample(1:nrow(com.data), 1)
-    
+    if(accumulation.order == "spatial"){
+      startval <- starts[permno]
+    }else{
+      # Grab a row value from the dataset
+      startval <- sample(1:nrow(com.data), 1)
+    }
+
     # Store sample number
     sample.id[permno] <- startval
-    
+
     # Pull out positions of rows based on proximity
-    plotorder <- order(plotdist[startval,], decreasing = F)
+    if(accumulation.order == "spatial"){
+      plotorder <- order(plotdist[startval,], decreasing = F) 
+    }else if(accumulation.order == "random"){
+      plotorder <- c(startval, 
+                     sample(c(1:nrow(com.data))[c(1:nrow(com.data)) != startval],
+                          (nrow(com.data)) - 1))
+    }else{
+      stop("accumulation function must be specified as 'spatial' or 'random'")
+    }
+    
+    # Store distance between samples
+    distance.means[[permno]] <- plotdist[startval, plotorder]
     
     # Initialize storage vector
     divaccum <- c()
-    plot.iter <- 200
+
     # Generate distance matrix based on starting row value
     for(plot.iter in 1:length(plotorder)){
       divaccum[plot.iter] <- d(com.data[plotorder[1:plot.iter],], 
@@ -49,81 +75,16 @@ jost_specaccum <- function(com.data, # Community data
   }
   
   # Converting storage list to matrix
-  divstore <- matrix(unlist(divstore), ncol = nrow(com.ids), byrow = TRUE)
+  divstore <- matrix(unlist(divstore), 
+                     ncol = nrow(com.ids), 
+                     byrow = TRUE)
   
-  output <- c(list(sample.id), list(divstore))
-  names(output) <- c("samples", "spec.accum")
+  distance.means <- matrix(unlist(distance.means), 
+                           ncol = nrow(com.ids), 
+                           byrow = TRUE)
+  
+  output <- c(list(sample.id), list(divstore), list(distance.means))
+  names(output) <- c("samples", "spec.accum", "dist.means")
   return(output)
   
 }
-
-com.matrix <- read.csv("./2016/alldatacombined2016.csv", stringsAsFactors = F)[,-1]
-com.ids <- read.csv("./2016/alldataidentification2016.csv", stringsAsFactors = F)
-com.matrix$BriMin <- as.numeric(com.matrix$BriMin)
-com.matrix[is.na(com.matrix)] <- 0
-n.perm = 10
-q.value = 0
-spatial.columns = c("mid_x", "mid_y")
-
-sites <- c("MCL", "HREC", "SFREC")
-scales <- c(1, .5, .25)
-blocks <- c(1:4)
-spatcols <- c("mid_x", "mid_y")
-n.perm = 99
-storage <- list()
-counter <- 1
-
-for(site_name in sites){
-  for(scaleval in scales){
-    for(blockval in blocks){
-      
-      storage <- c(storage, NA)
-      
-      storage[[counter]] <- list(data.frame(site = site_name,
-                                            scale = scaleval),
-                                 jost_specaccum(
-                                   com.data = com.matrix[
-                                    com.ids$site_code == site_name & 
-                                    com.ids$subplotres == scaleval &
-                                    com.ids$block == blockval,],
-                                   com.ids = com.ids[
-                                    com.ids$site_code == site_name & 
-                                    com.ids$subplotres == scaleval &
-                                    com.ids$block == blockval,],
-                                   n.perm = n.perm,
-                                   q.value = q.value,
-                                   spatial.columns = spatial.columns))
-      
-      counter <- counter + 1 
-    }
-  }
-}
-
-
-
-library(tidyr)
-longdata <- list(NULL)
-longdata
-i <- 1
-
-for( i in 1:length(storage)){
-  runs <- storage[[i]][[2]]$spec.accum
-  id <- storage[[i]][[1]]
-  
-  longdata[[1]] <- rbind(longdata[[1]],
-                         gather(cbind(data.frame(id, run = c(1:nrow(runs)), runs)), 
-         key = "samples", 
-         value = "div",
-         columns = -(1:3)))
-  
-}
-
-longdata <- longdata[[1]]
-longdata$samples <- as.numeric(gsub("X", "", longdata$samples))
-
-library(ggplot2)
-
-ggplot(aes(x = (samples * (scale ^ 2)),
-           y = div,
-           color = as.factor(scale)),
-       data = longdata) + geom_smooth() + facet_wrap(~site)
