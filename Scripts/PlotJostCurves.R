@@ -147,20 +147,13 @@ for(q.value in c(1:3)){
               dist.spat = mean(dist.mean))
   
   combdat <- merge(spatdat, randdat)
-  
   combdat$diff = combdat$mean.rand - combdat$mean.spat
   
   ggplot(aes(x = samples,
-             y = diff,
-             color = site,
-             group = samples),
+             y = diff /  mean.rand,
+             color = site),
          data = combdat) +
-    geom_line(aes(x = samples,
-                  y = meandiff,
-                  group = site,
-                  color = NULL),
-              data = reg.lines,
-              lwd = 1.2) + 
+    geom_line() + 
     geom_hline(yintercept = 0) +
     ylim(-.1,.5) + 
     facet_grid(site ~ scale, scales = "free_x") + 

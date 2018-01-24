@@ -62,20 +62,27 @@ prop_long <- data.frame(all_prop) %>% gather(key = "spec",
                     value = "prop",
                     -c(1:2))
 
-sumstats <- prop_long %>% group_by(site, spec) %>% summarize(avgval = mean(as.numeric(prop)), maxval = max(as.numeric(prop)))
-sumstats <- sumstats %>% group_by(site) %>% mutate(rankval = base::rank(avgval, ties.method = "first"))
+sumstats <- prop_long %>% group_by(site, spec) %>% filter(scale == 1) %>% summarize(maxval = max(as.numeric(prop)))
+sumstats <- sumstats %>% group_by(site) %>% mutate(rankval = base::rank(maxval, ties.method = "first"))
 prop_long <- merge(prop_long, sumstats)
 
-
-# ADD RANK HERE
+# Plotting: 
 
 prop_long %>% filter(prop > 0) %>%
   ggplot(aes(x = abs(max(rankval + 1) - rankval),
            y = as.numeric(prop),
            fill = scale)) + 
   geom_bar(stat = "identity", alpha = .3, position = PositionIdentity) + 
+  geom_line(aes(color = scale), lwd = .5) + 
   facet_wrap(~site) +
-  theme(legend.key = element_blank())
+  theme(legend.key = element_blank(),
+        panel.background = element_blank()) +
+  xlab("Species Rank Abundance") +
+  ylab("Proportional Abundance (of Total)")
+
+ggsave("TotalRankAbundance.pdf",
+       height = 8,
+       width = 16)
 
 prop_long %>% filter(prop > 0) %>%
   ggplot(aes(x = abs(max(rankval + 1) - rankval),
@@ -83,7 +90,15 @@ prop_long %>% filter(prop > 0) %>%
              color = scale)) + 
   geom_bar(stat = "identity", alpha = .3, position = PositionIdentity) + 
   facet_wrap(~site) +
-  theme(legend.key = element_blank())
+  theme(legend.key = element_blank(),
+        panel.background = element_blank()) +
+  xlab("Species Rank Abundance") +
+  ylab("Absolute Difference in Proportional Abundance From Largest Scale")
+
+ggsave("DifferenceInAbsAbundance.pdf",
+       height = 8,
+       width = 16)
+
 
 prop_long %>% filter(prop > 0) %>%
   ggplot(aes(x = abs(max(rankval + 1) - rankval),
@@ -91,6 +106,28 @@ prop_long %>% filter(prop > 0) %>%
              color = scale)) + 
   geom_bar(stat = "identity", alpha = .3, position = PositionIdentity) + 
   facet_wrap(~site) +
-  theme(legend.key = element_blank())
+  theme(legend.key = element_blank(),
+        panel.background = element_blank()) +
+  xlab("Species Rank Abundance") +
+  ylab("Proportional Difference in Proportional Abundance From Largest Scale")
 
-as.numeric(prop_long$prop) / as.numeric(prop_long$maxval)
+ggsave("DifferenceInPropAbundance.pdf",
+       height = 8,
+       width = 16)
+
+
+### Determining correlation
+
+prop_long <- prop_long %>% filter(prop > 0) %>% mutate(propdiff = (as.numeric(prop) / maxval) - 1)
+c(cor(prop_long$rankval[prop_long$scale == .5 & prop_long$site == "HREC"], 
+    prop_long$propdiff[prop_long$scale == .5 & prop_long$site == "HREC"]),
+cor(prop_long$rankval[prop_long$scale == .25 & prop_long$site == "HREC"], 
+    prop_long$propdiff[prop_long$scale == .25 & prop_long$site == "HREC"]),
+cor(prop_long$rankval[prop_long$scale == .5 & prop_long$site == "SFREC"], 
+    prop_long$propdiff[prop_long$scale == .5 & prop_long$site == "SFREC"]),
+cor(prop_long$rankval[prop_long$scale == .25 & prop_long$site == "SFREC"], 
+    prop_long$propdiff[prop_long$scale == .25 & prop_long$site == "SFREC"]),
+cor(prop_long$rankval[prop_long$scale == .5 & prop_long$site == "MCL"], 
+    prop_long$propdiff[prop_long$scale == .5 & prop_long$site == "MCL"]),
+cor(prop_long$rankval[prop_long$scale == .25 & prop_long$site == "MCL"], 
+    prop_long$propdiff[prop_long$scale == .25 & prop_long$site == "MCL"]))
