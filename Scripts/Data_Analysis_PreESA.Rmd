@@ -1,0 +1,618 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+### General Steps
+1. Check combined data look good
+2. Evaluate changes in biomass / light limitation
+3. Run alpha/beta/gamma diversity statistics
+4. Generate spatial accumulation curves
+5. Generate random spatial accumulation curves
+6. Construct confidence intervals for the difference for both.
+7. Construct spatial correlograms
+
+###1. Data checking and combining into a single dataframe
+
+```{r, echo=FALSE, warning=FALSE}
+master <- read.csv("../2017/alldatacombined2017.csv")
+descriptions <- read.csv("../2017/SiteDescriptions.csv")
+descriptions <- read.csv("../2017/SiteDescriptions.csv")
+lightreadings <- xlsx::read.xlsx("../2017/LightMeterReadings.xlsx", sheetIndex = 1)
+
+com.mat <- master[,8:ncol(master)] 
+com.attr <- master[,c(1:7)]
+com.attr <- merge(com.attr, descriptions)
+
+#library(JostDiv)
+library(dplyr)
+library(tidyverse)
+library(lmPerm)
+source("ens_specaccum.R")
+
+
+daub_correction <- function(x){
+  if(x == 1){ x <- ((0+1)/2)}
+  if(x == 2){ x <- ((1+5)/2)}
+  if(x == 3){ x <- ((5+25)/2)}
+  if(x == 4){ x <- ((25+50)/2)}
+  if(x == 5){ x <- ((50+75)/2)}
+  if(x == 6){ x <- ((75+95)/2)}
+  if(x == 7){ x <- ((95+100)/2)}
+  if(x == 0){ x <- 0}
+  return(x)
+}
+
+com.mat <- apply(com.mat,
+                 MARGIN = c(1,2), 
+                 FUN = daub_correction)
+
+com.mat <- data.frame(com.mat)
+com.mat <- com.mat %>% select(- one_of("Index", "Bare", "Poop.DEER.", "Hole", "Log", "Hoof", "Step", "Oak"))
+```
+
+### Confirming effects of nutrient addition on productivity:
+
+__Undergraduate research assistant currently processing biomass__
+
+### Confirming effects of nutrient addition on light availability:
+
+One of the easiest ways to confirm that nutrient enrichment is altering competitive dynamics in these sites is to compare light interception - under nutrient enrichment, plants grow larger, reduce light avilability at the soil surface, and increase the degree of light limitation (Tilman framework of resource competition).
+
+The figures below show light interception using a 10-diode light meter, placed in 10 randomized spatial locations within the plots. Spatial locations are constant across all plots.  Light interception is calculated as percent light above grass "canopy"  divided by the average of two samples taken at the soil surface. Each column represent sites (or subdivided into blocks within a site in the second graph), with boxplots colored by fertilization treatment.
+
+These data suggest we're seeing response of increased light interception in most sites (one that I assume would also be confirmed by biomass samples), but patterns are quite variable. Particularly when light interception is already very high (values ~1), effects seem less significant.
+
+```{r}
+left_join(x = lightreadings, y = descriptions) %>% 
+  ggplot(aes( x = factor(Site),
+              y = Interception,
+              fill = factor(Fertilized))) +
+  geom_boxplot()
+
+left_join(x = lightreadings, y = descriptions) %>% 
+  ggplot(aes( x = factor(BlockNo),
+              y = Interception,
+              fill = factor(Fertilized))) +
+  geom_boxplot() + 
+  facet_wrap(~Site)
+```
+
+### How are species abundance distributions changing?
+
+Species accumulation curves are often linked to species abundance distributions. Theoretical work suggests that fitted values of the intercept and asymptote of species accumulation curves are closely related to the abundances of dominant and rare species, respectively. Changes in the abundance of dominant species tends to have large effects on the average diversity of a single plot (curve intercept), which these abundant species often occupy. On the other hand, changes in the abundance of rare species tends to have a larger effect on the asymptote of this curve, which tend to only be encountered when sampling effort is large. 
+
+I think this is a critical step into determining the mechanisms behind change in accumulation curves. If we see that abundance distributions become more uneven (greater dominance of just a few species), we can expect that effects will become more pronounced as spatial scale expands. However, if communities are roughly equivalent to one another in terms of overall abundance distributions yet are more aggregated spatially, the intercept of this relationship will decrease while the asymptote remains the same. Moreover, it can get to more biologically relevant patterns - what species are being lost? Is there a consistent pattern of change related to species provenance or functional group?
+
+In this case, I don't see any evidence for meaningful change in species abundances. Below I've plotted abundance as a function of rank order in all plots on a log scale. There's some meaningful differences between sites and blocks, but no distinguishable treatment effects. It would help to relabel with species names or color by provenance, but that can wait til the next update.
+
+```{r, , echo=FALSE}
+SAD.data <- cbind(com.attr, com.mat)
+SAD.data %>% group_by(Site, BlockNo, PlotNo, Fertilized) %>% summarise_at(-c(1:11), mean) %>%
+  gather(key = "species", 
+         value = "cover",
+         -c(1:4)) %>%
+  filter(Site == "HREC") %>%
+  filter(cover > 0) %>%
+  group_by(Site, BlockNo, Fertilized) %>%
+  mutate(rankorder = max(min_rank(cover)) - min_rank(cover)) %>%
+  arrange(desc(cover)) %>%
+  ggplot(aes(x = rankorder,
+             y = log(cover), 
+             group = species,
+             fill = as.factor(Fertilized))) +
+  geom_point(shape = 21 ) +
+  facet_grid(BlockNo ~ Site) +
+  guides(color = FALSE)
+
+SAD.data <- cbind(com.attr, com.mat)
+SAD.data %>% group_by(Site, BlockNo, PlotNo, Fertilized) %>% summarise_at(-c(1:11), mean) %>%
+  gather(key = "species", 
+         value = "cover",
+         -c(1:4)) %>%
+  filter(Site == "SFREC") %>%
+  filter(cover > 0) %>%
+  group_by(Site, BlockNo, Fertilized) %>%
+  mutate(rankorder = max(min_rank(cover)) - min_rank(cover)) %>%
+  arrange(desc(cover)) %>%
+  ggplot(aes(x = rankorder,
+             y = log(cover), 
+             group = species,
+             fill = as.factor(Fertilized))) +
+  geom_point(shape = 21 ) +
+  facet_grid(BlockNo ~ Site) +
+  guides(color = FALSE)
+
+SAD.data <- cbind(com.attr, com.mat)
+SAD.data %>% group_by(Site, BlockNo, PlotNo, Fertilized) %>% summarise_at(-c(1:11), mean) %>%
+  gather(key = "species", 
+         value = "cover",
+         -c(1:4)) %>%
+  filter(Site == "MCL") %>%
+  filter(cover > 0) %>%
+  group_by(Site, BlockNo, Fertilized) %>%
+  mutate(rankorder = max(min_rank(cover)) - min_rank(cover)) %>%
+  arrange(desc(cover)) %>%
+  ggplot(aes(x = rankorder,
+             y = log(cover), 
+             fill = as.factor(Fertilized))) +
+  geom_point(shape = 21 ) +
+  facet_grid(BlockNo ~ Site) +
+  guides(color = FALSE)
+```
+
+#2a. Alpha/beta/gamma diversity statistics
+
+The simplest way to then express scale-dependent changes in diversity is through what is referred to as a "two-scale analysis" in the context of spatial accumulation. In this case, we can compare alpha, beta, and gamma diversity statistics, which give rough approximations of the intercept (alpha), slope (beta), and asymptote (gamma) of our accumulation distribution.
+
+Similarly to the methods I suggested to Julia in writing her paper, I use effective number of species metrics here (also known as Hill numbers of Q-diversity metrics), which allow for different weighting of abundances. Values of "Q" correspond to this weighting:
+
+- 0 corresponds to species richness (no role of abundance)
+- 1 corresponds to "exponentiated Shannon diversity" (directly proportional role of abundance)
+- 2 corresponds to the "inverse Simpson concentration" (squared weighted of abundances, dominants are more important)
+
+These relationships are multiplicative, based on Whittaker's definition of gamma = alpha * beta. In this case, alpha = average subplot diversity and gamma = total plot diversity.
+
+The plots below show the diversity values of each plot within sites, colored by fertilizer treatment. The different columns distinguish between values of Q and rows are diversity levels.
+
+Like before, there aren't clear patterns here.
+
+```{r, , echo=FALSE}
+# Redefines d_calc as d_fun for ease of use
+
+dfun = d_calc
+
+com_norm <- normalize_rows(com.mat)
+unique(rowSums(com_norm)) == 1
+
+# Sample (alpha) diversity
+alpha_q0 = apply(com_norm, 1, dfun, q = 0, sample.weight = 1)
+alpha_q1 = apply(com_norm, 1, dfun, q = 1, sample.weight = 1)
+alpha_q2 = apply(com_norm, 1, dfun, q = 2, sample.weight = 1)
+
+# Aggregating to generate gamma diversity matrix
+com.gamma <- cbind(com.attr[,c(1:3, 11)], com.mat) %>% 
+  group_by(Site, BlockNo, PlotNo, Fertilized) %>%
+  summarise_all(mean)
+
+# Generating gamma diversity dataset
+gamma.attr <- com.gamma[,1:4]
+gamma.norm <- normalize_rows(com.gamma[,-(1:4)])
+
+# Total (gamma) diversity
+gamma_q0 = apply(gamma.norm, 1, dfun, q = 0, sample.weight = 1)
+gamma_q1 = apply(gamma.norm, 1, dfun, q = 1, sample.weight = 1)
+gamma_q2 = apply(gamma.norm, 1, dfun, q = 2, sample.weight = 1)
+
+# Turnover (beta) diversity
+alpha.stats <- cbind(com.attr, alpha_q0, alpha_q1, alpha_q2) %>% 
+  group_by(Site, BlockNo, PlotNo, Fertilized) %>%
+  summarise_at(c("alpha_q0", "alpha_q1", "alpha_q2"), mean)
+
+gamma.stats <- cbind(data.frame(gamma.attr), gamma_q0, gamma_q1, gamma_q2)
+
+# Combining into a single dataframe
+alldiv.stats <- full_join(alpha.stats, gamma.stats) %>%
+  mutate(beta_q0 = gamma_q0 / alpha_q0,
+         beta_q1 = gamma_q1 / alpha_q1,
+         beta_q2 = gamma_q2 / alpha_q2)
+
+alldiv.stats <- gather(alldiv.stats, key = "div", value = "val", 
+       -(1:4))
+
+alldiv.stats$level = gsub("_.*", "", alldiv.stats$div)
+alldiv.stats$q = as.numeric(gsub(".*_q", "", alldiv.stats$div))
+alldiv.stats <- alldiv.stats %>% select( -div)
+```
+
+```{r, , echo=FALSE}
+alldiv.stats %>% 
+  ggplot(aes(x = Site,
+             y = val,
+             color = factor(Fertilized),
+             group = BlockNo)) +
+  geom_point(position = position_dodge(.5)) + 
+  facet_grid(level ~ q, scales = "free")
+
+```
+
+To supplement this, I've run some simple contrasts between plots in a random-effects framework. The following table shows the estimated treatment effect at a given diversity level and value of Q, with associated P value determined by permutation test. While we seem to show a hint decreased alpha diversity, roughly similar values of gamma, and slightly elevated beta in response to treatment (or I'm probably just looking for the pattern I want to see), nothing is significant enough to be confident. This isn't surprising, and I expect substantial changes this year.
+
+```{r, warning = FALSE, echo=FALSE}
+library(lme4)
+library(lmerTest)
+library(knitr)
+output <- data.frame(lev = NULL, q = NULL, coef = NULL, pval = NULL)
+
+alldiv.stats$Fertilized <- as.factor(alldiv.stats$Fertilized)
+
+for(lev in c("alpha", "beta", "gamma")){
+  for(qval in c(0,1,2)){
+    mod <- lmer(val ~ Fertilized + (1|Site) + (1|Site:BlockNo),
+           data = alldiv.stats[alldiv.stats$level == lev &
+                                 alldiv.stats$q == qval,],
+           REML = FALSE)
+
+    output <- rbind(output,
+          data.frame(q = qval, lev = lev, coef = unique(coef(mod)$Site$Fertilized1), pval = anova(mod)$"Pr(>F)"))
+  }
+}
+
+kable(output[order(output$q),])
+```
+
+#3 Generate spatial and random accumulation curves
+
+The final step in this analysis is to generate spatial and random spatial accumulation curves to decompose the above relationships into a more detailed set of components. Doing so should be able to distinguish some of the spatial effects previously mentioned.
+
+At the current stage, these figures don't show a clear pattern - mostly, there's just noise. This is to be expected if there aren't clear signals of alpha and gamma diversity, as shown above. However, we do see a trend of magnified differences as spatial scale expands, but quickly flatten out. This is likely indicative of some small-scale spatial heterogeneity that is gradually accounted for in larger spatial scales.
+
+The figures below show observed differences in spatial accumulation curves (with abundance weighted diversity as a metric), with the mean value in black. 95% confidence intervals are also added as a dashed black line, but these aren't entirely correct. Producing confidence intervals in a mixed-effects framework isn't straightforward, so estimates are far too low at the higher end of the scale values. Regardless, all these confidence intervals likely indicate no significant effects.
+
+```{r, cache = TRUE, echo = FALSE, warning = FALSE, message=FALSE}
+
+output <- list(NA)
+counter <- 1
+qval = 0
+
+for(SiteName in c("MCL", "SFREC", "HREC")){
+  for(BlockVal in c(1:4)){
+      F_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,],
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"))
+  
+      UF_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"))
+      
+      out <- cbind(data.frame(site = rep(as.character(SiteName), 2),
+                 block = rep(as.character(BlockVal), 2),
+                 fert = c(1,0),
+                 stat = c("mean", "mean")),
+            rbind(F_agg[[1]], UF_agg[[1]]))
+      
+      output[[counter]] = list(out)
+      counter <- counter + 1
+
+  }
+}
+
+outputlong <- reduce(output, bind_rows) %>%
+  gather(key = "samp", value = "div", -(1:4))
+
+meandiff <- outputlong %>% group_by(site, block, samp) %>%
+  filter(stat == "mean") %>%
+  transmute(divdif = (div[fert == 0] - div[fert == 1]))
+
+overalltrend <- meandiff %>% group_by(samp, site) %>%
+  summarise(divdif = mean(divdif))
+
+outputlong %>% ggplot(aes(x = as.numeric(samp),
+                      y = as.numeric(div),
+                      color = as.factor(fert))) +
+  geom_line() + 
+  facet_grid(block~site) +
+  ggtitle(paste("Spatial Accumulation Curves at q =", qval))
+
+meandiff %>% ggplot(aes(x = as.numeric(samp),
+                      y = as.numeric(divdif),
+                      color = site,
+                      group = block)) +
+  geom_line() + 
+  geom_line(aes(y = divdif,
+             color = NULL,
+             group = NULL),
+            data = overalltrend,
+            size = 1.5) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~site) +
+  ggtitle(paste("Difference in Spatial Accumulation Curves at q = ", qval))
+```
+
+```{r, cache = TRUE, echo = FALSE, warning = FALSE, message=FALSE}
+
+output <- list(NA)
+counter <- 1
+source("ens_specaccum.R")
+qval = 1
+
+for(SiteName in c("MCL", "SFREC", "HREC")){
+  for(BlockVal in c(1:4)){
+      F_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,],
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"))
+  
+      UF_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"))
+      
+      out <- cbind(data.frame(site = rep(as.character(SiteName), 2),
+                 block = rep(as.character(BlockVal), 2),
+                 fert = c(1,0),
+                 stat = c("mean", "mean")),
+            rbind(F_agg[[1]], UF_agg[[1]]))
+      
+      output[[counter]] = list(out)
+      counter <- counter + 1
+
+  }
+}
+
+outputlong <- reduce(output, bind_rows) %>%
+  gather(key = "samp", value = "div", -(1:4))
+
+meandiff <- outputlong %>% group_by(site, block, samp) %>%
+  filter(stat == "mean") %>%
+  transmute(divdif = (div[fert == 0] - div[fert == 1]))
+
+overalltrend <- meandiff %>% group_by(samp, site) %>%
+  summarise(divdif = mean(divdif))
+
+outputlong %>% ggplot(aes(x = as.numeric(samp),
+                      y = as.numeric(div),
+                      color = as.factor(fert))) +
+  geom_line() + 
+  facet_grid(block~site) +
+  ggtitle(paste("Spatial Accumulation Curves at q =", qval))
+
+meandiff %>% ggplot(aes(x = as.numeric(samp),
+                      y = as.numeric(divdif),
+                      color = site,
+                      group = block)) +
+  geom_line() + 
+  geom_line(aes(y = divdif,
+             color = NULL,
+             group = NULL),
+            data = overalltrend,
+            size = 1.5) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~site) +
+  ggtitle(paste("Difference in Spatial Accumulation Curves at q = ", qval))
+```
+
+```{r, cache = TRUE, echo = FALSE, warning = FALSE, message=FALSE}
+
+output <- list(NA)
+counter <- 1
+source("ens_specaccum.R")
+qval = 2
+
+for(SiteName in c("MCL", "SFREC", "HREC")){
+  for(BlockVal in c(1:4)){
+      F_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,],
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"))
+  
+      UF_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"))
+      
+      out <- cbind(data.frame(site = rep(as.character(SiteName), 2),
+                 block = rep(as.character(BlockVal), 2),
+                 fert = c(1,0),
+                 stat = c("mean", "mean")),
+            rbind(F_agg[[1]], UF_agg[[1]]))
+      
+      output[[counter]] = list(out)
+      counter <- counter + 1
+
+  }
+}
+
+outputlong <- reduce(output, bind_rows) %>%
+  gather(key = "samp", value = "div", -(1:4))
+
+meandiff <- outputlong %>% group_by(site, block, samp) %>%
+  filter(stat == "mean") %>%
+  transmute(divdif = (div[fert == 0] - div[fert == 1]))
+
+overalltrend <- meandiff %>% group_by(samp, site) %>%
+  summarise(divdif = mean(divdif))
+
+outputlong %>% ggplot(aes(x = as.numeric(samp),
+                      y = as.numeric(div),
+                      color = as.factor(fert))) +
+  geom_line() + 
+  facet_grid(block~site) +
+  ggtitle(paste("Spatial Accumulation Curves at q =", qval))
+
+meandiff %>% ggplot(aes(x = as.numeric(samp),
+                      y = as.numeric(divdif),
+                      color = site,
+                      group = block)) +
+  geom_line() + 
+  geom_line(aes(y = divdif,
+             color = NULL,
+             group = NULL),
+            data = overalltrend,
+            size = 1.5) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~site) +
+  ggtitle(paste("Difference in Spatial Accumulation Curves at q = ", qval))
+```
+
+# Random spatial accumulation curves
+
+To calculate randomized species-area curves, must generate a randomize order of samples within the dataset, then continue with sample accumulation as usual for a given number of permutations.
+
+However, must double-check that the resampler is working correctly - 
+
+```{r, cache = TRUE, echo = FALSE, warning = FALSE, message=FALSE}
+
+output <- list(NA)
+counter <- 1
+n.perm <- 99
+F_perms <- list(NA)
+qval = 0
+
+for(SiteName in c("MCL", "SFREC", "HREC")){
+  for(BlockVal in c(1:4)){
+    
+    F_perms <- list(NA)
+    UF_perms <- list(NA)
+
+    for(perm in 1:n.perm ){
+      
+      F_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,] ,
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"),
+          order = "random")
+      
+      F_perms[[counter]] <- F_agg[[1]]
+    
+      UF_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"),
+          order = "random")
+      
+      UF_perms[[counter]] <- UF_agg[[1]]
+      
+      counter = counter + 1
+
+    }
+    
+    matrix(unlist(F_agg), byrow = TRUE, ncol = 64)[1,]
+    
+    # Relevant statistics are:
+    # Mean
+    # .5th percentile
+    # 2.5th percentile
+    # 5th percentile
+    # 95th percentile
+    # 97.5th percentile
+    # 99.5th percentile
+      
+    out <- cbind(data.frame(site = rep(as.character(SiteName), 2),
+                 block = rep(as.character(BlockVal), 2),
+                 fert = c(1,0),
+                 stat = c("mean", "mean")),
+            rbind(F_agg[[1]], UF_agg[[1]]))
+      
+    output[[counter]] = list(out)
+    counter <- counter + 1
+
+  }
+}
+
+rand_outputlong <- reduce(output, bind_rows) %>%
+  gather(key = "samp", value = "div", -(1:4))
+
+rand_meandiff <- rand_outputlong %>% group_by(site, block, samp) %>%
+  filter(stat == "mean") %>%
+  transmute(divdif = (div[fert == 0] - div[fert == 1]))
+
+rand_diffvar <- rand_outputlong %>% group_by(site, block, samp) %>%
+  filter(stat == "var") %>%
+  transmute(divdif = (div[fert == 0] + div[fert == 1]) / 2)
+
+rand_overalltrend <- rand_meandiff %>% group_by(samp, site) %>%
+  summarise(divdif = mean(divdif))
+
+rand_overallvar <- rand_diffvar %>% group_by(samp, site) %>%
+  summarise(divdif = sum(divdif)) %>%
+  mutate(divsd = sqrt(divdif / (100 * 4))) %>%
+  mutate(conf = qtukey(1 - .1, 2, 100 * 8) * divsd)
+
+rand_overallvar$highconf = rand_overallvar$conf + rand_overalltrend$divdif
+rand_overallvar$lowconf = rand_overalltrend$divdif - rand_overallvar$conf
+
+rand_meandiff %>% ggplot(aes(x = as.numeric(samp),
+                      y = as.numeric(divdif),
+                      color = site,
+                      group = block)) +
+  geom_line() + 
+  geom_line(aes(y = divdif,
+             color = NULL,
+             group = NULL),
+            data = rand_overalltrend,
+            size = 1.5) +
+  geom_line(aes(y = highconf,
+            x = as.numeric(samp),
+            color = NULL,
+            group = NULL),
+            data = rand_overallvar) + 
+    geom_line(aes(y = lowconf,
+            x = as.numeric(samp),
+            color = NULL,
+            group = NULL),
+            data = rand_overallvar) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~site) + 
+  ggtitle("Difference in Random Accumulation Curves")
+```
+
+#4 Spatial correlograms
+
+For more spatial context, here are some spatial correlograms (community distance vs. physical distance). No clear signal here either, beyond a weak, general trend towards local aggregation. 
+
+```{r}
+library(vegan)
+spat.data <- cbind(com.attr, com.mat)
+
+spat.data %>% group_by(Site, BlockNo, PlotNo, Fertilized) %>%
+  select(one_of("SubplotX", "SubplotY")) %>%
+  do(data.frame(as.matrix(dist(.))))
+
+spat.data %>% 
+  group_by(Site, BlockNo, PlotNo, Fertilized) %>% 
+  do(data.frame(vdist = c(vegdist((.[,-c(1:10)]))),
+                pdist = c(dist(.[,5:6])))) %>%
+  ggplot(aes(y = vdist,
+             x = pdist,
+             color = as.factor(Fertilized))) +
+  geom_point(shape = 21, alpha = .2) +
+  facet_grid(Site ~ BlockNo) +
+  stat_smooth(method = "lm", color = "black", aes(linetype = as.factor(Fertilized)))
+
+```
+

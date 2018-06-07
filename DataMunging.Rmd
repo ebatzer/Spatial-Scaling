@@ -1,0 +1,11 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Steps:
+
+# Need to segment all dataframes into segments of 9 rows, the first being a header
+  # For each dataframe, check that there are no duplicate columns
+    # If there are, merge them together and spit a warning
+  

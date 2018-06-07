@@ -56,5 +56,5 @@ merge_by_cover <- function(com.matrix1,
     }
   }
   
-  return(com.matrix1)
+  return(data.frame(com.id1, com.matrix1))
 }

@@ -110,10 +110,15 @@ for(sites in unique(com.attr$Site)){
       spatial.columns = c("x", "y"),
       accumulation.order = "random")
     
-    F_dat <- cbind(data.frame(type = c("rand", "agg"), site = rep(attr.subset$Site[1], 2),
-                               block = rep(attr.subset$BlockNo[1],2),  fert = rep(1, 2)),
-                    rbind(data.frame(F_rand$spec.accum) %>% summarise_all(., .funs = mean),
-                          data.frame(F_agg$spec.accum) %>% summarise_all(., .funs = mean))) %>%
+    F_dat <- cbind(data.frame(type = c("rand", "agg"), 
+                              site = rep(attr.subset$Site[1], 2),
+                              block = rep(attr.subset$BlockNo[1],2),  
+                              fert = rep(1, 2)),
+                    rbind(data.frame(F_rand$spec.accum) %>% 
+                            summarise_all(., .funs = mean),
+                          data.frame(F_agg$spec.accum) %>% 
+                            summarise_all(., .funs = mean))) %>%
+      
       gather(key = "plots",
              value = "diversity",
              -c(1:4))
@@ -140,7 +145,7 @@ ggplot(aes(x = as.numeric(plots),
            color = factor(fert),
            lty = factor(type)),
        data = merged.data.frame[merged.data.frame$site == "MCL" &
-                                  merged.data.frame$block == 2,]) + 
+                                  merged.data.frame$block == 3,]) + 
   geom_line() + 
 theme(axis.text = element_text(size = 20),
       axis.title = element_text(size = 20),

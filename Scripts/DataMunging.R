@@ -1,49 +1,229 @@
-setwd("c:/Users/ebatz/Box Sync/Eviner lab shared/Evan/Research Projects/Spatial-Scaling/Spatial Scaling")
-getwd()
+# Munging datasets:
 
-library(tidyverse)
-library(reshape2)
-library(plyr)
+################################################################################
 
-dat <- read.csv("SFRECSpring2017Raw.csv", header = F, stringsAsFactors = F)
+library(dplyr)
+library(testthat)
+library(tidyr)
+source("scripts/mergebycover.R")
 
-chunk.rows <- 17
-tdata <- dat
+################################################################################
 
-nrow(dat)/chunk.rows
+siteiter <- 0
+merged_dat <- data.frame(NA)
 
-datamunger <- function(your.data, chunk.rows){
+for(sitename in c("MCL", "SFREC", "HREC")){
   
-  tdata <- your.data
+  # All data
+  rawdat <- read.csv(paste("2018/", sitename, "_peak_2018.csv", sep = ""),
+                     header = FALSE,
+                     stringsAsFactors = FALSE)
   
-  master.chunk <- as.data.frame(tdata[2:chunk.rows,])
-  colnames(master.chunk) <- as.character(c(tdata[1,]))
-  colnames(master.chunk)[1] <- "Site"
-  master.chunk[2:16,1:4] = master.chunk[1,1:4]
-  master.chunk <- master.chunk[, names(master.chunk) != '']
+  # Initializing dataframe
+  newdat <- data.frame("NA")
+  iter <- 0
   
-  n.reps <- nrow(tdata)/chunk.rows
-  
-  for(sets in 1:(n.reps - 1)){
+  # While the new dataframe is not full
+  while(nrow(newdat) < 512){
     
-    tdata <- tdata[-(1:17),]
+    # Segment the whole dataframe into a chunk containing 17 rows
+    dat_chunk <- rawdat[c(c(1:17) + (17 * iter)),]
     
-    munge.chunk <- as.data.frame(tdata[2:chunk.rows,])
-    colnames(munge.chunk) <- as.character(c(tdata[1,]))
-    munge.chunk[2:16,1:4] = munge.chunk[1,1:4]
-    munge.chunk <- munge.chunk[, names(munge.chunk) != '']
-  
-    master.chunk <- join_all(list(as.tibble(master.chunk), as.tibble(munge.chunk)), type = "full")
-
+    # Turn the first row into a header
+    names(dat_chunk) <- dat_chunk[1,]
+    dat_chunk <- dat_chunk[-1,]
+    rownames(dat_chunk) <- NULL
+    
+    dat_chunk <- dat_chunk[,colnames(dat_chunk) != ""]
+    
+    # If the starting index is equal to 0
+    if(iter == 0){
+      newdat <- dat_chunk
+    }else{
+      newdat <- bind_rows(newdat, dat_chunk)
+    }
+    
+    iter <- iter + 1
+    
   }
   
-  return(master.chunk)
+  newdat[is.na(newdat)] <- 0
+  
+  # Error checking:
+  
+  # Correct number of 
+  expect_equal(nrow(newdat), 512)
+  
+  # Equal distribution across all datasets?
+  newdat %>% group_by(SiteName, BlockNo, PlotNo) %>%
+    summarise(obs = n())
+  
+  if(siteiter == 0){
+    merged_dat <- newdat
+  }else{
+    merged_dat <- bind_rows(merged_dat, newdat)
+  }
+  
+  siteiter <- siteiter + 1
+  
+  merged_dat[is.na(merged_dat)] <- 0
   
 }
 
-munged.data <- datamunger(dat, chunk.rows)
-com.matrix <- munged.data[,8:ncol(munged.data)]
-com.matrix <- com.matrix[,order(colnames(com.matrix))]
-fulldata <- cbind(munged.data[,1:7], com.matrix)
-write.csv(x = fulldata,
-          "SFRECSpring2017Edited.csv")
+colorder <- c(colnames(merged_dat)[1:6], 
+              sort(colnames(merged_dat)[7:length(colnames(merged_dat))]))
+
+peak_dat <- merged_dat %>% select(colorder)
+
+peak_dat[peak_dat == 0] <- ""
+
+################################################################################
+# Cleaning up column labels
+
+col_labs <- read.csv("2018/ColumnLabels.csv",
+                     header = TRUE,
+                     stringsAsFactors = FALSE)
+
+clean_dat <- peak_dat[,1:6]
+
+col_labs <- col_labs[unlist(lapply(col_labs[,1], FUN=function(x){x %in% colnames(peak_dat)})),]
+
+
+for(colname in unique(col_labs$NewVal)){
+  
+  oldcols = col_labs$ColVal[col_labs$NewVal == colname]
+    
+  toadd = peak_dat %>% 
+    select(oldcols) %>% unite(new, sep = "")
+    
+  names(toadd) = tolower(colname)
+    
+  clean_dat <- clean_dat %>% bind_cols(toadd)
+
+  
+}
+
+peak_merged <- clean_dat
+
+write.csv(x = clean_dat, "2018/merged_data_2018_peak.csv")
+
+################################################################################
+
+siteiter <- 0
+merged_dat <- data.frame(NA)
+
+for(sitename in c("MCL", "SFREC", "HREC")){
+  
+  # All data
+  rawdat <- read.csv(paste("2018/", sitename, "_spring_2018.csv", sep = ""),
+                     header = FALSE,
+                     stringsAsFactors = FALSE)
+  
+  # Initializing dataframe
+  newdat <- data.frame("NA")
+  iter <- 0
+  
+  # While the new dataframe is not full
+  while(nrow(newdat) < 512){
+    
+    # Segment the whole dataframe into a chunk containing 17 rows
+    dat_chunk <- rawdat[c(c(1:17) + (17 * iter)),]
+    
+    # Turn the first row into a header
+    names(dat_chunk) <- dat_chunk[1,]
+    dat_chunk <- dat_chunk[-1,]
+    rownames(dat_chunk) <- NULL
+    
+    dat_chunk <- dat_chunk[,colnames(dat_chunk) != ""]
+    
+    # If the starting index is equal to 0
+    if(iter == 0){
+      newdat <- dat_chunk
+    }else{
+      newdat <- bind_rows(newdat, dat_chunk)
+    }
+    
+    iter <- iter + 1
+    
+  }
+  
+  newdat[is.na(newdat)] <- 0
+  
+  # Error checking:
+  
+  # Correct number of 
+  expect_equal(nrow(newdat), 512)
+  
+  # Equal distribution across all datasets?
+  newdat %>% group_by(SiteName, BlockNo, PlotNo) %>%
+    summarise(obs = n())
+  
+  if(siteiter == 0){
+    merged_dat <- newdat
+  }else{
+    merged_dat <- bind_rows(merged_dat, newdat)
+  }
+  
+  siteiter <- siteiter + 1
+  
+  merged_dat[is.na(merged_dat)] <- 0
+  
+}
+
+colorder <- c(colnames(merged_dat)[1:6], 
+              sort(colnames(merged_dat)[7:length(colnames(merged_dat))]))
+
+spring_dat <- merged_dat %>% select(colorder)
+
+spring_dat[spring_dat == 0] <- ""
+
+################################################################################
+
+# Cleaning up column labels
+
+col_labs <- read.csv("2018/ColumnLabels.csv",
+                     header = TRUE,
+                     stringsAsFactors = FALSE)
+
+clean_dat <- spring_dat[,1:6]
+
+col_labs <- col_labs[unlist(lapply(col_labs[,1], FUN=function(x){x %in% colnames(spring_dat)})),]
+
+for(colname in unique(col_labs$NewVal)){
+  
+  oldcols = col_labs$ColVal[col_labs$NewVal == colname]
+  
+  toadd = spring_dat %>% 
+    select(oldcols) %>% unite(new, sep = "")
+  
+  names(toadd) = tolower(colname)
+    
+  clean_dat <- clean_dat %>% bind_cols(toadd)
+  
+
+}
+
+spring_merged <- clean_dat
+
+write.csv(x = spring_merged, "2018/merged_data_2018_spring.csv")
+
+################################################################################
+# Merging by cover (Only taking highest cover per sampling event)
+
+id.order <- c("SiteName", "BlockNo", "PlotNo", "Subplot No", "Subplot X", "Subplot Y")
+
+final_merged <- merge_by_cover(peak_merged[,7:ncol(peak_merged)], 
+               spring_merged[,7:ncol(spring_merged)],
+               peak_merged[,1:6],
+               spring_merged[,1:6],
+               id.order = id.order)
+
+colorder <- c(colnames(final_merged)[1:6], 
+              sort(colnames(final_merged)[7:length(colnames(final_merged))]))
+
+final_merged <- final_merged %>% select(colorder)
+
+################################################################################
+# Finalized Version
+write.csv(x = final_merged, "2018/merged_data_2018_final.csv")
+################################################################################
