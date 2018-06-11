@@ -1,14 +1,14 @@
-Site,SiteName,Date Established,PlotLocation,BlockNo,PlotNo,Fertilized
-MCL,McLaughlin Natural Reserve,2/8/2017,,1,1,0
-MCL,McLaughlin Natural Reserve,2/8/2017,,1,2,1
-MCL,McLaughlin Natural Reserve,2/8/2017,,2,1,1
-MCL,McLaughlin Natural Reserve,2/8/2017,,2,2,0
-MCL,McLaughlin Natural Reserve,2/8/2017,,3,1,0
-MCL,McLaughlin Natural Reserve,2/8/2017,,3,2,1
-MCL,McLaughlin Natural Reserve,2/8/2017,,4,1,1
-MCL,McLaughlin Natural Reserve,2/8/2017,,4,2,0
-SFREC,Sierra Foothill REC,2/11/2017,,1,1,0
-SFREC,Sierra Foothill REC,2/11/2017,,1,2,1
+site,sitename,dateestablished,plotlocation,block,plot,fertilized
+MCLA,McLaughlin Natural Reserve,2/8/2017,,1,1,0
+MCLA,McLaughlin Natural Reserve,2/8/2017,,1,2,1
+MCLA,McLaughlin Natural Reserve,2/8/2017,,2,1,0
+MCLA,McLaughlin Natural Reserve,2/8/2017,,2,2,1
+MCLA,McLaughlin Natural Reserve,2/8/2017,,3,1,1
+MCLA,McLaughlin Natural Reserve,2/8/2017,,3,2,0
+MCLA,McLaughlin Natural Reserve,2/8/2017,,4,1,1
+MCLA,McLaughlin Natural Reserve,2/8/2017,,4,2,0
+SFREC,Sierra Foothill REC,2/11/2017,,1,1,1
+SFREC,Sierra Foothill REC,2/11/2017,,1,2,0
 SFREC,Sierra Foothill REC,2/11/2017,,2,1,0
 SFREC,Sierra Foothill REC,2/11/2017,,2,2,1
 SFREC,Sierra Foothill REC,2/11/2017,,3,1,0

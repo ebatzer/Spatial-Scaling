@@ -1,0 +1,243 @@
+---
+title: "Combining Datasets by Year"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# 2017 Community data
+data2017 <- read.csv("../2017/alldatacombined2017.csv", stringsAsFactors = FALSE)
+
+# 2018 Community data
+data2018 <- read.csv("../2018/merged_data_2018_final.csv", stringsAsFactors = FALSE)
+
+# Site descriptions
+descriptions <- read.csv("../2017/SiteDescriptions.csv")
+
+# Species labels
+specs <- read.csv("../SpeciesList.csv")
+
+# Renames columns to be consistent
+colnames(data2017)[1:7] <- c("site", "block", "plot", "subplot", "x", "y", "note")
+colnames(data2018)[1:7] <- c("index", "site", "block", "plot", "subplot", "x", "y")
+
+# Turning labels to all lowercase
+colnames(data2017) <- tolower(colnames(data2017))
+colnames(data2018) <- tolower(colnames(data2018))
+
+# Adding year column
+data2017$year <- rep(2017, nrow(data2017))
+data2018$year <- rep(2018, nrow(data2018))
+
+# Converting species labels to all lowercase
+specs$Label <- tolower(specs$Label)
+
+# Changing "MCL" to "MCLA"
+data2017$site <- gsub("MCL", "MCLA", data2017$site)
+
+master <- bind_rows(data2017, data2018)
+table(master %>% select(site, block, plot, year))
+```
+
+# Next steps:
+
+* Standardize list of species among groups
+* Check for errors
+  * Some easy ones:
+      * No medicago polymorpha? Just Trifolium dubium
+      * VicVil vs. VicSat (VicSat only @ Hopland?)
+      * What is V1
+      * Spiky hypochaeris vs. notago
+      * Removing question marks from certain species
+      * Tritileia blue to Trilieia laxa
+  * 
+
+```{r}
+com.mat <- master %>% 
+  select(- one_of("site", "block", "plot", "subplot", "x", "y", "note", "index", "year")) 
+ com.attr <-  master %>% 
+   select(one_of("site", "block", "plot", "subplot", "x", "y", "note", "index", "year"))
+
+# Converting NAs to zeroes
+com.mat[is.na(com.mat)] <- 0
+
+# Subsetting to just live species 
+livespecs <- specs[specs$Live == 1,]
+com.mat <- com.mat %>% select(one_of(as.character(livespecs$Label)))
+
+# For each of these labels, rename to the correct species label and unite shared columns
+# Can likely reuse old script for this
+
+col_labs <- livespecs[unlist(lapply(livespecs[,1], FUN=function(x){x %in% colnames(com.mat)})),]
+```
+
+```{r}
+clean_dat <- com.attr
+
+for(colname in unique(col_labs$Species)){
+  
+  oldcols = col_labs$Label[col_labs$Species == colname]
+  oldcols = as.character(oldcols)
+
+  toadd = com.mat %>% 
+    select(one_of(oldcols))
+  
+  toadd = apply(toadd, 1, FUN = function(x){return(max(x))})
+  toadd = data.frame(toadd)
+  names(toadd) = colname
+    
+  clean_dat <- clean_dat %>% bind_cols(toadd)
+}
+
+colorder <- c(colnames(clean_dat)[1:9], 
+              sort(colnames(clean_dat)[10:length(colnames(clean_dat))]))
+
+final_merged <- clean_dat %>% select(colorder)
+final_merged <- final_merged %>% arrange(year, site, block, plot, y, x)
+```
+
+```{r}
+#library(JostDiv)
+library(dplyr)
+library(tidyverse)
+library(lmPerm)
+source("ens_specaccum.R")
+
+com.mat <- final_merged %>% select(- one_of("site", "block", "plot", "subplot", "x", "y", "note", "index", "year"))
+com.attr <-  final_merged %>% select(one_of("site", "block", "plot", "subplot", "x", "y", "note", "index", "year"))
+
+com.attr <- left_join(com.attr, descriptions, by = c("site", "block", "plot"))
+
+daub_correction <- function(x){
+  if(x == 1){ x <- ((0+1)/2)}
+  if(x == 2){ x <- ((1+5)/2)}
+  if(x == 3){ x <- ((5+25)/2)}
+  if(x == 4){ x <- ((25+50)/2)}
+  if(x == 5){ x <- ((50+75)/2)}
+  if(x == 6){ x <- ((75+95)/2)}
+  if(x == 7){ x <- ((95+100)/2)}
+  if(x == 0){ x <- 0}
+  return(x)
+}
+
+com.mat <- apply(com.mat,
+                 MARGIN = c(1,2), 
+                 FUN = daub_correction)
+
+com.mat <- data.frame(com.mat)
+
+# Checking that all values are as they should be (0, .5, 15, 37.5, 62.5, 85, 97.5)
+unique(unlist(com.mat))
+```
+
+```{r}
+hist(rowSums(com.mat))
+```
+
+
+```{r}
+dfun = d_calc
+
+com_norm <- normalize_rows(com.mat)
+unique(rowSums(com_norm)) == 1
+
+# Sample (alpha) diversity
+alpha_q0 = apply(com_norm, 1, dfun, q = 0, sample.weight = 1)
+alpha_q1 = apply(com_norm, 1, dfun, q = 1, sample.weight = 1)
+alpha_q2 = apply(com_norm, 1, dfun, q = 2, sample.weight = 1)
+
+# Combining alpha statistics to a single dataframe
+alpha.stats <- cbind(com.attr, alpha_q0, alpha_q1, alpha_q2) %>% 
+  group_by(site, block, plot, fertilized, year) %>%
+  summarise_at(c("alpha_q0", "alpha_q1", "alpha_q2"), mean)
+
+alpha.stats %>% 
+  ggplot(aes(x = year,
+             y = alpha_q0,
+             color = as.factor(fertilized))) +
+  geom_point() + geom_line(aes(group = paste(site, block, fertilized)), alpha = .2) +
+  stat_smooth(method = "lm", se = FALSE, size = 2)
+```
+
+```{r}
+# Aggregating to generate gamma diversity matrix
+com.gamma <- cbind(select(com.attr, site, block, plot, year, fertilized), com.mat) %>% 
+  group_by(site, block, plot, year, fertilized) %>%
+  summarise_all(sum)
+
+# Generating gamma diversity dataset
+gamma.attr <- com.gamma[,1:5]
+gamma.norm <- normalize_rows(com.gamma[,-(1:5)])
+
+# Total (gamma) diversity
+gamma_q0 = apply(gamma.norm, 1, dfun, q = 0, sample.weight = 1)
+gamma_q1 = apply(gamma.norm, 1, dfun, q = 1, sample.weight = 1)
+gamma_q2 = apply(gamma.norm, 1, dfun, q = 2, sample.weight = 1)
+
+gamma.stats <- cbind(data.frame(gamma.attr), gamma_q0, gamma_q1, gamma_q2)
+
+alpha.stats %>% 
+  ggplot(aes(x = year,
+             y = gamma_q2,
+             color = as.factor(fertilized))) +
+  geom_point() + stat_smooth(method = "lm", se = FALSE, size = 2)
+
+```
+
+```{r}
+# Combining into a single dataframe
+alldiv.stats <- full_join(alpha.stats, gamma.stats) %>%
+  mutate(beta_q0 = gamma_q0 / alpha_q0,
+         beta_q1 = gamma_q1 / alpha_q1,
+         beta_q2 = gamma_q2 / alpha_q2)
+
+alldiv.stats <- gather(alldiv.stats, key = "div", value = "val", 
+       -(1:5))
+
+alldiv.stats$level = gsub("_.*", "", alldiv.stats$div)
+alldiv.stats$q = as.numeric(gsub(".*_q", "", alldiv.stats$div))
+alldiv.stats <- alldiv.stats %>% select( -div)
+alldiv.stats
+```
+
+```{r}
+alldiv.stats %>% 
+  ggplot(aes(x = site,
+             y = val,
+             color = factor(fertilized),
+             group = block)) +
+  geom_point(position = position_dodge(.5)) + 
+  facet_grid(level ~ q, scales = "free")
+```
+
+# Consider splitting into a separate dataframe that can then be used for statistics in separate workflows
+
+
+
+
+```{r}
+library(lme4)
+library(lmerTest)
+library(knitr)
+output <- data.frame(lev = NULL, q = NULL, coef = NULL, pval = NULL)
+
+alldiv.stats$fertilized <- as.factor(alldiv.stats$fertilized)
+
+for(lev in c("alpha", "beta", "gamma")){
+  for(qval in c(0,1,2)){
+    mod <- lmer(val ~ fertilized * as.factor(year) + (1|site) + (1|site:block),
+           data = alldiv.stats[alldiv.stats$level == lev &
+                                 alldiv.stats$q == qval,],
+           REML = FALSE)
+
+    output <- rbind(output,
+          data.frame(q = qval, lev = lev, coef = unique(coef(mod)$site$fertilized1), pval = anova(mod)$"Pr(>F)"))
+  }
+}
+
+kable(output[order(output$q),])
+```
+

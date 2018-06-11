@@ -19,7 +19,6 @@ output:
 ```{r, echo=FALSE, warning=FALSE}
 master <- read.csv("../2017/alldatacombined2017.csv")
 descriptions <- read.csv("../2017/SiteDescriptions.csv")
-descriptions <- read.csv("../2017/SiteDescriptions.csv")
 lightreadings <- xlsx::read.xlsx("../2017/LightMeterReadings.xlsx", sheetIndex = 1)
 
 com.mat <- master[,8:ncol(master)] 
