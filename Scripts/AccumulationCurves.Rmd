@@ -1,0 +1,141 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(lmPerm)
+library(dplyr)
+source("ens_specaccum.R")
+
+final_merged <- read.csv("final_2018.csv", header = TRUE, stringsAsFactors = FALSE)
+head(final_merged)[,1:20]
+
+com.mat <- final_merged %>% select(- one_of("site", "block", "plot", "subplot", "x", "y", 
+                                            "note", "index", "year", "sitename", "dateestablished", 
+                                            "plotlocation", "fertilized", "X"))
+com.attr <-  final_merged %>% select(one_of("site", "block", "plot", "subplot", "x", "y", 
+                                            "note", "index", "year", "sitename", "dateestablished", 
+                                            "plotlocation", "fertilized"))
+
+dfun = d_calc
+
+com_norm <- normalize_rows(com.mat)
+unique(rowSums(com_norm)) == 1
+```
+
+# Spatial accumulation curves:
+
+```{r, cache = TRUE, echo = FALSE, warning = FALSE, message=FALSE}
+
+output <- list(NA)
+counter <- 1
+qval = 0
+
+for(SiteName in c("MCL", "SFREC", "HREC")){
+  for(BlockVal in c(1:4)){
+      F_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,],
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"))
+  
+      UF_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"))
+      
+      out <- cbind(data.frame(site = rep(as.character(SiteName), 2),
+                 block = rep(as.character(BlockVal), 2),
+                 fert = c(1,0),
+                 stat = c("mean", "mean")),
+            rbind(F_agg[[1]], UF_agg[[1]]))
+      
+      output[[counter]] = list(out)
+      counter <- counter + 1
+
+  }
+}
+
+```
+
+# Random species accumulation curves:
+
+```{r, cache = TRUE, echo = FALSE, warning = FALSE, message=FALSE}
+
+output <- list(NA)
+counter <- 1
+n.perm <- 99
+F_perms <- list(NA)
+qval = 0
+
+for(SiteName in c("MCL", "SFREC", "HREC")){
+  for(BlockVal in c(1:4)){
+    
+    F_perms <- list(NA)
+    UF_perms <- list(NA)
+
+    for(perm in 1:n.perm ){
+      
+      F_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,] ,
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 1,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"),
+          order = "random")
+      
+      F_perms[[counter]] <- F_agg[[1]]
+    
+      UF_agg <- jost_specaccum_v2(
+          com.data = com.mat[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          com.ids = com.attr[com.attr$Site == SiteName &
+                             com.attr$BlockNo == BlockVal &
+                             com.attr$Fertilized == 0,],
+          q.value = qval,
+          spatial.columns = c("SubplotX", "SubplotY"),
+          order = "random")
+      
+      UF_perms[[counter]] <- UF_agg[[1]]
+      
+      counter = counter + 1
+
+    }
+    
+    matrix(unlist(F_agg), byrow = TRUE, ncol = 64)[1,]
+    
+    # Relevant statistics are:
+    # Mean
+    # .5th percentile
+    # 2.5th percentile
+    # 5th percentile
+    # 95th percentile
+    # 97.5th percentile
+    # 99.5th percentile
+      
+    out <- cbind(data.frame(site = rep(as.character(SiteName), 2),
+                 block = rep(as.character(BlockVal), 2),
+                 fert = c(1,0),
+                 stat = c("mean", "mean")),
+            rbind(F_agg[[1]], UF_agg[[1]]))
+      
+    output[[counter]] = list(out)
+    counter <- counter + 1
+
+  }
+}
+
+```

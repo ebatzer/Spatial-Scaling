@@ -1,0 +1,588 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+# Random and spatial permutations:
+
+## Loading packages and data:
+
+# Initial data exploration:
+
+Can use this part of the notebook just to check that things are working properly
+
+```{r}
+# Packages
+library(tidyverse) #dplyr, tidyr, ggplot
+
+# Random accumulation curves ###################################################
+
+rpq0 <- read.csv("randompermutations_q0.csv", header = TRUE, stringsAsFactors = FALSE)
+rpq0 <- rpq0 %>% gather(value = "div", key = "samp", -c(1:7))
+rpq0$samp <- as.numeric(gsub("X", "", rpq0$samp))
+
+rpq1 <- read.csv("randompermutations_q1.csv", header = TRUE, stringsAsFactors = FALSE)
+rpq1 <- rpq1 %>% gather(value = "div", key = "samp", -c(1:7))
+rpq1$samp <- as.numeric(gsub("X", "", rpq1$samp))
+
+rpq2 <- read.csv("randompermutations_q2.csv", header = TRUE, stringsAsFactors = FALSE)
+rpq2 <- rpq2 %>% gather(value = "div", key = "samp", -c(1:7))
+rpq2$samp <- as.numeric(gsub("X", "", rpq2$samp))
+
+# Spatial accumulation curves
+spatcurves <- read.csv("spatial_accumulation.csv", header = TRUE, stringsAsFactors = FALSE)
+spq0 <- spatcurves %>% filter(q == 0)
+spq1 <- spatcurves %>% filter(q == 1)
+spq2 <- spatcurves %>% filter(q == 2)
+
+```
+
+
+```{r}
+sitename <- "HREC"
+blockno <- 2
+yearval <- 2018
+
+rpq0 %>% filter(site == sitename & block == blockno & year == yearval) %>%
+  ggplot(aes(x = samp,
+             y = div,
+             color = as.factor(fert),
+             group = perm)) +
+  geom_point(alpha = .01) + 
+  geom_line(data = spq0 %>% filter(site == sitename & block == blockno & year == yearval),
+            aes(x = samp,
+                y = div,
+                group = NULL,
+                color = as.factor(fert)))
+```
+
+```{r}
+rpq1 %>% filter(site == sitename & block == blockno & year == yearval) %>%
+  ggplot(aes(x = samp,
+             y = div,
+             color = as.factor(fert),
+             group = perm)) +
+  geom_point(alpha = .01) + 
+  geom_line(data = spq1 %>% filter(site == sitename & block == blockno & year == yearval),
+            aes(x = samp,
+                y = div,
+                group = NULL,
+                color = as.factor(fert)))
+```
+
+```{r}
+rpq2 %>% filter(site == sitename & block == blockno & year == yearval) %>%
+  ggplot(aes(x = samp,
+             y = div,
+             color = as.factor(fert),
+             group = perm)) +
+  geom_point(alpha = .01) + 
+  geom_line(data = spq2 %>% filter(site == sitename & block == blockno & year == yearval),
+            aes(x = samp,
+                y = div,
+                group = NULL,
+                color = as.factor(fert)))
+```
+
+# Differences between random accumulation curves:
+
+```{r}
+# Random permutation summary ###################################################
+
+# Q0
+sumstatsq0 <- rpq0 %>% select(-X) %>% spread(key = fert, div)
+colnames(sumstatsq0)[7:8] = c("uf_random", "f_random")
+sumstatsq0$rand_diff <- -(sumstatsq0$uf_random - sumstatsq0$f_random)
+sumstatsq0$rand_propdiff <- sumstatsq0$rand_diff / sumstatsq0$uf_random
+
+# Q1
+sumstatsq1 <- rpq1 %>% select(-X) %>% spread(key = fert, div)
+colnames(sumstatsq1)[7:8] = c("uf_random", "f_random")
+sumstatsq1$rand_diff <- -(sumstatsq1$uf_random - sumstatsq1$f_random)
+sumstatsq1$rand_propdiff <- sumstatsq1$rand_diff / sumstatsq1$uf_random
+
+# Q2
+sumstatsq2 <- rpq2 %>% select(-X) %>% spread(key = fert, div)
+colnames(sumstatsq2)[7:8] = c("uf_random", "f_random")
+sumstatsq2$rand_diff <- -(sumstatsq2$uf_random - sumstatsq2$f_random)
+sumstatsq2$rand_propdiff <- sumstatsq2$rand_diff / sumstatsq2$uf_random
+
+# Spatial permutation summary ###################################################
+statsq0 = spq0 %>% select(-X) %>% spread(key = fert, div)
+colnames(statsq0)[7:8] = c("Unfert", "Fert")
+statsq0$diff <- -(statsq0$Unfert - statsq0$Fert)
+statsq0$propdiff <- statsq0$diff / statsq0$Unfert
+
+statsq1 = spq1 %>% select(-X) %>% spread(key = fert, div)
+colnames(statsq1)[7:8] = c("Unfert", "Fert")
+statsq1$diff <- -(statsq1$Unfert - statsq1$Fert)
+statsq1$propdiff <- statsq1$diff / statsq1$Unfert
+
+statsq2 = spq2 %>% select(-X) %>% spread(key = fert, div)
+colnames(statsq2)[7:8] = c("Unfert", "Fert")
+statsq2$diff <- -(statsq2$Unfert - statsq2$Fert)
+statsq2$propdiff <- statsq2$diff / statsq2$Unfert
+
+head(sumstatsq0)
+head(statsq0)
+```
+
+# Need to generate summary table with:
+
+* Mean difference in random curves
+* Confidence intervals (50, 95, 97.5, 99)
+* Plots with mean difference in random accumulation curves relative to spatial
+* Plots with mean difference between random accumulation curves relative to spatial
+
+```{r}
+conf_q0 <- sumstatsq0 %>% group_by(site, block, year, samp) %>%
+  filter(site != "HREC") %>%
+  summarise(mean_U = mean(uf_random),
+            mean_F = mean(f_random),
+            mean_diff = mean(rand_diff), 
+            mean_prop = mean(rand_propdiff),
+            percent_995 = quantile(rand_diff, .995),
+            percent_975 = quantile(rand_diff, .975),
+            percent_95 = quantile(rand_diff, .95),
+            percent_005 = quantile(rand_diff, .005),
+            percent_025 = quantile(rand_diff, .025),
+            percent_05 = quantile(rand_diff, .05))
+
+conf_q1 <- sumstatsq1 %>% group_by(site, block, year, samp) %>%
+  filter(site != "HREC") %>%
+  summarise(mean_U = mean(uf_random),
+            mean_F = mean(f_random),
+            mean_diff = mean(rand_diff), 
+            mean_prop = mean(rand_propdiff),
+            percent_995 = quantile(rand_diff, .995),
+            percent_975 = quantile(rand_diff, .975),
+            percent_95 = quantile(rand_diff, .95),
+            percent_005 = quantile(rand_diff, .005),
+            percent_025 = quantile(rand_diff, .025),
+            percent_05 = quantile(rand_diff, .05))
+
+conf_q2 <- sumstatsq2 %>% group_by(site, block, year, samp) %>%
+  filter(site != "HREC") %>%
+  summarise(mean_U = mean(uf_random),
+            mean_F = mean(f_random ),
+            mean_diff = mean(rand_diff), 
+            mean_prop = mean(rand_propdiff),
+            percent_995 = quantile(rand_diff, .995),
+            percent_975 = quantile(rand_diff, .975),
+            percent_95 = quantile(rand_diff, .95),
+            percent_005 = quantile(rand_diff, .005),
+            percent_025 = quantile(rand_diff, .025),
+            percent_05 = quantile(rand_diff, .05))
+```
+
+# Plotting lines to show confidence intervals
+
+```{r}
+sitename <- "SFREC"
+blockno <- 4
+yearval <- 2017
+
+conf_q2 %>% filter(site == sitename & block == blockno & year == yearval) %>%
+  ggplot(aes(x = samp)) +
+  geom_line(aes(y = mean_diff)) +
+  geom_line(aes(y = percent_975), lty = 2) +
+  geom_line(aes(y = percent_025), lty = 2) +
+  geom_line(aes(y = percent_995), lty = 3) +
+  geom_line(aes(y = percent_005), lty = 3) +
+  geom_line(aes(y = percent_95), lty = 4) +
+  geom_line(aes(y = percent_05), lty = 4) +
+  geom_line(data = statsq2 %>% filter(site == sitename & block == blockno & year == yearval),
+            aes(x = samp,
+                y = diff),
+            color = "red")
+```
+
+# Steps to calculate confidence intervals for the whole site
+
+* Calculate means and join datasets together
+
+    * Unclear what the best way is to calculate sitewide differences in means - improper to take the average of different confidence intervals, rather than the mean of each permutation
+
+* Plot mean total effect change
+
+* Plot mean random effect change
+
+* Plot net effect change
+
+  * Add confidence intervals
+
+```{r}
+site_conf_q0 <- sumstatsq0 %>% 
+  filter(!(site == "HREC")) %>%
+  group_by(year, samp, perm) %>%
+  summarise(meandiff = mean(rand_diff)) %>%
+  group_by(year, samp) %>%
+  summarise(mean_diff = mean(meandiff), 
+            percent_995 = quantile(meandiff, .995),
+            percent_975 = quantile(meandiff, .975),
+            percent_95 = quantile(meandiff, .95),
+            percent_005 = quantile(meandiff, .005),
+            percent_025 = quantile(meandiff, .025),
+            percent_05 = quantile(meandiff, .05))
+
+site_conf_q1 <- sumstatsq1 %>% 
+  filter(!(site == "HREC")) %>%
+  group_by(year, samp, perm) %>%
+  summarise(meandiff = mean(rand_diff)) %>%
+  group_by(year, samp) %>%
+  summarise(mean_diff = mean(meandiff), 
+            percent_995 = quantile(meandiff, .995),
+            percent_975 = quantile(meandiff, .975),
+            percent_95 = quantile(meandiff, .95),
+            percent_005 = quantile(meandiff, .005),
+            percent_025 = quantile(meandiff, .025),
+            percent_05 = quantile(meandiff, .05))
+
+site_conf_q2 <- sumstatsq2 %>% 
+  filter(!(site == "HREC")) %>%
+  group_by(year, samp, perm) %>%
+  summarise(meandiff = mean(rand_diff)) %>%
+  group_by(year, samp) %>%
+  summarise(mean_diff = mean(meandiff), 
+            percent_995 = quantile(meandiff, .995),
+            percent_975 = quantile(meandiff, .975),
+            percent_95 = quantile(meandiff, .95),
+            percent_005 = quantile(meandiff, .005),
+            percent_025 = quantile(meandiff, .025),
+            percent_05 = quantile(meandiff, .05))
+```
+
+# Q = 0 
+
+```{r}
+# Site to filter:
+ # MCLA 1
+ # HREC 1
+to_join <- statsq0 %>%  filter(!(site == "HREC"))
+
+test <- inner_join(to_join, site_conf_q0)
+
+test %>% 
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  ggplot(aes(x = samp)) +
+  geom_line(aes(y= diff), color = "red") + 
+  geom_line(aes(y = percent_975), lty = 2) +
+  geom_line(aes(y = percent_025), lty = 2) +
+  geom_line(aes(y = percent_995), lty = 3) +
+  geom_line(aes(y = percent_005), lty = 3) +
+  geom_line(aes(y = percent_95), lty = 4) +
+  geom_line(aes(y = percent_05), lty = 4) +
+  facet_wrap(~year) +
+  geom_hline(yintercept = 0)
+```
+```{r}
+# Site to filter:
+ # MCLA 1
+ # HREC 1
+
+to_join <- statsq1 %>% filter(!(site == "HREC"))
+
+test <- inner_join(to_join, site_conf_q1)
+
+test %>% 
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  ggplot(aes(x = samp)) +
+  geom_line(aes(y= diff), color = "red") + 
+  geom_line(aes(y= mean_diff)) +
+  geom_line(aes(y = percent_975), lty = 2) +
+  geom_line(aes(y = percent_025), lty = 2) +
+  geom_line(aes(y = percent_995), lty = 3) +
+  geom_line(aes(y = percent_005), lty = 3) +
+  geom_line(aes(y = percent_95), lty = 4) +
+  geom_line(aes(y = percent_05), lty = 4) +
+  facet_wrap(~year) +
+  geom_hline(yintercept = 0)
+
+```
+
+```{r}
+# Site to filter:
+ # MCLA 1
+ # HREC 1
+
+to_join <- statsq0 %>% filter(!(site == "HREC"))
+
+test <- inner_join(to_join, site_conf_q0)
+
+test %>% 
+  filter(year == 2018) %>%
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  ggplot(aes(x = samp)) +
+  # geom_ribbon(aes(ymin = percent_005 / Unfert, ymax = percent_995 / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  # geom_ribbon(aes(ymin = percent_025 / Unfert, ymax = percent_975 / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  # geom_ribbon(aes(ymin = percent_05 / Unfert, ymax = percent_95 / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  # geom_line(aes(y= mean_diff / Unfert), size = 2) +
+  geom_line(aes(y= diff / Unfert), color = "black", size = 2) + 
+  geom_hline(yintercept = 0) +
+  ylim(-.15, 0) +
+  ylab("Proportion Diversity Change") + 
+  xlab("Sampling Effort") +
+  theme(text = element_text(size = 15, face = "bold")) +
+  theme(panel.background = element_rect(fill = "white"),
+        plot.background = element_rect(fill = "white")) + 
+  theme(panel.grid.major = element_line(colour = "grey85"))
+
+ggsave(filename = "Figures/netchange_q0_spatial.jpeg", height = 5, width = 5)
+
+test %>% 
+  filter(year == 2018) %>%
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  ggplot(aes(x = samp)) +
+  # geom_ribbon(aes(ymin = percent_005 / Unfert, ymax = percent_995 / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  geom_ribbon(aes(ymin = mean_diff / Unfert, ymax =diff / Unfert), 
+               alpha = .5, fill = "forestgreen", color = "black", lty = 2, alpha = .5) +
+  geom_line(aes(y = percent_025 / Unfert),  color = "black", lty = 2, size = 1) +
+  geom_line(aes(y = percent_975 / Unfert),  color = "black", lty = 2, size = 1) +
+  # geom_ribbon(aes(ymin = percent_05 / Unfert, ymax = percent_95 / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  geom_line(aes(y= mean_diff / Unfert), size = 2, lty = 2) +
+  geom_line(aes(y= diff / Unfert), color = "black", size = 2) + 
+  geom_hline(yintercept = 0) +
+  ylim(-.15, 0) +
+  ylab("Proportion Diversity Change") + 
+  xlab("Sampling Effort") +
+  theme(text = element_text(size = 15, face = "bold")) +
+  theme(panel.background = element_rect(fill = "white"),
+        plot.background = element_rect(fill = "white")) + 
+  theme(panel.grid.major = element_line(colour = "grey85"))
+
+ggsave(filename = "Figures/netchange_q0_random.jpeg", height = 5, width = 5)
+
+```
+
+```{r}
+to_join <- statsq0 %>% filter(!(site == "HREC")) 
+
+test <- inner_join(to_join, site_conf_q0)
+
+test %>% 
+  filter(year == 2018) %>%
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  filter(year == 2018) %>%
+  ggplot(aes(x = samp)) +
+  annotate("text", x = 32, y = .035, label = "Agg. Effect Greater in Control", alpha = .4, size = 6) + 
+  annotate("text", x = 32, y = -.035, label = "Agg. Effect Greater in Treatment", alpha = .4, size = 6) +
+  # geom_ribbon(aes(ymin = percent_005 / Unfert - mean_diff / Unfert, 
+  #                 ymax = percent_995 / Unfert - mean_diff / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  geom_ribbon(aes(ymin = percent_025 / Unfert - mean_diff / Unfert, 
+                  ymax = percent_975 / Unfert  - mean_diff / Unfert), 
+              alpha = .4, fill = "white", color = "black", lty = 2) +
+    # geom_ribbon(aes(ymin = percent_05 / Unfert - mean_diff / Unfert, 
+    #               ymax = percent_95 / Unfert  - mean_diff / Unfert), 
+    #           alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  geom_line(aes(y= mean_diff / Unfert - mean_diff / Unfert), size = 1, lty = 2) +
+  geom_line(aes(y= diff / Unfert  - mean_diff / Unfert), color = "forestgreen", size = 2) + 
+  ylab("Net Aggregation Effect") + 
+  xlab("Sampling Effort") +
+  ylim(-.04, .04) +
+  theme(text = element_text(size = 15, face = "bold")) +
+  theme(panel.background = element_rect(fill = "white"),
+        plot.background = element_rect(fill = "white"))  + 
+  theme(panel.grid.major = element_line(colour = "grey85"))
+
+ggsave(filename = "Figures/aggeffect_q0.jpeg", height = 5, width = 5)
+
+```
+
+```{r}
+# Site to filter:
+ # MCLA 1
+ # HREC 1
+
+to_join <- statsq2 %>% filter(!(site == "HREC"))
+
+test <- inner_join(to_join, site_conf_q2)
+
+test %>% 
+  filter(year == 2018) %>%
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  ggplot(aes(x = samp)) +
+  # geom_ribbon(aes(ymin = percent_005 / Unfert, ymax = percent_995 / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  # geom_ribbon(aes(ymin = percent_025 / Unfert, ymax = percent_975 / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  # geom_ribbon(aes(ymin = percent_05 / Unfert, ymax = percent_95 / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  # geom_line(aes(y= mean_diff / Unfert), size = 2) +
+  geom_line(aes(y= diff / Unfert), color = "black", size = 2) + 
+  geom_hline(yintercept = 0) +
+  ylim(-.20, 0) +
+  ylab("Proportion Diversity Change") + 
+  xlab("Sampling Effort") +
+  theme(text = element_text(size = 15, face = "bold")) +
+  theme(panel.background = element_rect(fill = "white"),
+        plot.background = element_rect(fill = "white")) + 
+  theme(panel.grid.major = element_line(colour = "grey85"))
+
+ggsave(filename = "Figures/netchange_q2_spatial.jpeg", height = 5, width = 5)
+
+test %>% 
+  filter(year == 2018) %>%
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  ggplot(aes(x = samp)) +
+  # geom_ribbon(aes(ymin = percent_005 / Unfert, ymax = percent_995 / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  geom_ribbon(aes(ymin = mean_diff / Unfert, ymax =diff / Unfert), 
+               alpha = .5, fill = "forestgreen", color = "black", lty = 2, alpha = .5) +
+  geom_line(aes(y = percent_025 / Unfert),  color = "black", lty = 2, size = 1) +
+  geom_line(aes(y = percent_975 / Unfert),  color = "black", lty = 2, size = 1) +
+  # geom_ribbon(aes(ymin = percent_05 / Unfert, ymax = percent_95 / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  geom_line(aes(y= mean_diff / Unfert), size = 2, lty = 2) +
+  geom_line(aes(y= diff / Unfert), color = "black", size = 2) + 
+  geom_hline(yintercept = 0) +
+  ylim(-.2, 0) +
+  ylab("Proportion Diversity Change") + 
+  xlab("Sampling Effort") +
+  theme(text = element_text(size = 15, face = "bold")) +
+  theme(panel.background = element_rect(fill = "white"),
+        plot.background = element_rect(fill = "white")) + 
+  theme(panel.grid.major = element_line(colour = "grey85"))
+
+ggsave(filename = "Figures/netchange_q2_random.jpeg", height = 5, width = 5)
+```
+
+
+```{r}
+to_join <- statsq2 %>% filter(!(site == "HREC")) 
+
+test <- inner_join(to_join, site_conf_q2)
+
+test %>% 
+  filter(year == 2018) %>%
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  filter(year == 2018) %>%
+  ggplot(aes(x = samp)) +
+  annotate("text", x = 32, y = .035, label = "Agg. Effect Greater in Control", alpha = .4, size = 6) + 
+  annotate("text", x = 32, y = -.035, label = "Agg. Effect Greater in Treatment", alpha = .4, size = 6) +
+  # geom_ribbon(aes(ymin = percent_005 / Unfert - mean_diff / Unfert, 
+  #                 ymax = percent_995 / Unfert - mean_diff / Unfert), 
+  #             alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  geom_ribbon(aes(ymin = percent_025 / Unfert - mean_diff / Unfert, 
+                  ymax = percent_975 / Unfert  - mean_diff / Unfert), 
+              alpha = .4, fill = "white", color = "black", lty = 2) +
+    # geom_ribbon(aes(ymin = percent_05 / Unfert - mean_diff / Unfert, 
+    #               ymax = percent_95 / Unfert  - mean_diff / Unfert), 
+    #           alpha = .4, fill = "lightblue", color = "black", lty = 2) +
+  geom_line(aes(y= mean_diff / Unfert - mean_diff / Unfert), size = 1, lty = 2) +
+  geom_line(aes(y= diff / Unfert  - mean_diff / Unfert), color = "forestgreen", size = 2) + 
+  ylab("Net Aggregation Effect") + 
+  xlab("Sampling Effort") +
+  ylim(-.04, .04) +
+  theme(text = element_text(size = 15, face = "bold")) +
+  theme(panel.background = element_rect(fill = "white"),
+        plot.background = element_rect(fill = "white"))  + 
+  theme(panel.grid.major = element_line(colour = "grey85"))
+
+ggsave(filename = "Figures/aggeffect_q2.jpeg", height = 5, width = 5)
+
+```
+
+### OLD VERSION ################################################################
+# Q = 0 
+
+```{r}
+# Site to filter:
+ # MCLA 1
+ # HREC 1
+to_join <- statsq0 %>% filter(!(site == "HREC")) 
+  
+test <- inner_join(to_join, site_conf_q0)
+
+test %>% 
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  filter(year == 2018) %>%
+  ggplot(aes(x = samp)) +
+  geom_line(aes(y= mean_diff - diff), color = "red") +
+  geom_line(aes(y = percent_975- mean_diff), lty = 2) +
+  geom_line(aes(y = percent_025- mean_diff), lty = 2) +
+  geom_line(aes(y = percent_995- mean_diff), lty = 3) +
+  geom_line(aes(y = percent_005- mean_diff), lty = 3) +
+  geom_line(aes(y = percent_95- mean_diff), lty = 4) +
+  geom_line(aes(y = percent_05- mean_diff), lty = 4) +
+  facet_wrap(~year) +
+  geom_hline(yintercept = 0) +
+  ylab("Mean Aggregation Effect") + 
+  xlab("Sample Number") +
+  ggtitle("Aggregation Effect (Richness)")
+
+ggsave(filename = "Presentation Figures/aggeffectq0.jpeg")
+```
+
+```{r}
+# Site to filter:
+ # MCLA 1
+ # HREC 1
+
+to_join <- statsq1 %>% filter(!(site == "HREC"))
+
+test <- inner_join(to_join, site_conf_q1)
+
+test %>% 
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  ggplot(aes(x = samp)) +
+  geom_line(aes(y= diff - mean_diff), color = "red") + 
+  geom_line(aes(y = percent_975 - mean_diff), lty = 2) +
+  geom_line(aes(y = percent_025 - mean_diff), lty = 2) +
+  geom_line(aes(y = percent_995 - mean_diff), lty = 3) +
+  geom_line(aes(y = percent_005 - mean_diff), lty = 3) +
+  geom_line(aes(y = percent_95- mean_diff), lty = 4) +
+  geom_line(aes(y = percent_05- mean_diff), lty = 4) +
+  facet_wrap(~year) +
+  geom_hline(yintercept = 0)
+
+```
+
+```{r}
+# Site to filter:
+ # MCLA 1
+ # HREC 1
+
+to_join <- statsq2 %>% filter(!(site == "HREC"))
+  
+test <- inner_join(to_join, site_conf_q2)
+
+test %>%
+  group_by(year, samp) %>%
+  summarise_if(is.numeric, mean) %>%
+  filter(year == 2018) %>%
+  ggplot(aes(x = samp)) +
+  geom_line(aes(y= mean_diff - diff), color = "red") + 
+  geom_line(aes(y = mean_diff - diff, group = paste(site, block)), alpha = .1, data = test %>% filter(year == 2018)) +
+  geom_line(aes(y = percent_975- mean_diff), lty = 2) +
+  geom_line(aes(y = percent_025- mean_diff), lty = 2) +
+  geom_line(aes(y = percent_995- mean_diff), lty = 3) +
+  geom_line(aes(y = percent_005- mean_diff), lty = 3) +
+  geom_line(aes(y = percent_95- mean_diff), lty = 4) +
+  geom_line(aes(y = percent_05- mean_diff), lty = 4) +
+  facet_wrap(~year) +
+  geom_hline(yintercept = 0) +
+  ylab("Mean Aggregation Effect") + 
+  xlab("Sample Number") +
+  ggtitle("Aggregation Effect (InvSimpson)")
+
+
+View(test)
+ggsave("Presentation Figures/aggeffectq2.jpeg")
+
+```
+

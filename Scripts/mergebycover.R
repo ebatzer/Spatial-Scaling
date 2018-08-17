@@ -47,7 +47,7 @@ merge_by_cover <- function(com.matrix1,
       # If the column exists in both matrices
       # Find what values matrix 2 > matrix 1, and overwrite those values
       overlap.index <- com.matrix2[,names(com.matrix2) == colval] > com.matrix1[,names(com.matrix1) == colval]
-      com.matrix1[overlap.index,names(com.matrix1) == colval] <- com.matrix2[overlap.index, names(com.matrix2) == colval]
+      com.matrix1[overlap.index, names(com.matrix1) == colval] <- com.matrix2[overlap.index, names(com.matrix2) == colval]
       
       # Print the column name and the number of times it was changed
       print(paste("Column", colval, "found in both matrices"), sep = "")

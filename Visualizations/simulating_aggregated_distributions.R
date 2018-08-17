@@ -1,190 +1,350 @@
-#devtools::install_github("MoBiodiv/mobsim", build_vignettes = TRUE)
-# library(devtools)
-# install.packages("Rcpp")
-# install_github("MoBiodiv/mobsim")
-# 
 library(mobsim)
 library(ggplot2)
+library(dplyr)
+library(gapminder)
+library(gganimate)
+library(RCurl)
+library(httr)
+library(tidyverse)
+library(viridis)
 
-comm_rand <- sim_thomas_community(s_pool = 4, n_sim = 200, mother_points = 1, cluster_points = 10, sigma = 1)
-comm_agg <- sim_thomas_community(s_pool = 6, n_sim = 200, sigma = 0.25, mother_points = 1, cluster_points = 10)
+n = 14^2
+
+set.seed(4)
+
+comm_rand <- sim_thomas_community(s_pool = 4, n_sim = n, mother_points = 1, cluster_points = 10, sigma = .3, sad_coef = list("meanlog" = 0, "sdlog" = 0))
+
+comm_agg <- sim_thomas_community(s_pool = 6, n_sim = n, sigma = 0.1, mother_points = 1, cluster_points = 10, sad_coef = list("meanlog" = 0, "sdlog" = 0))
 
 agg_pts <- cbind(type = rep("agg", nrow(comm_agg$census)), comm_agg$census)
 rand_pts <- cbind(type = rep("rand", nrow(comm_rand$census)), comm_rand$census)
+agg_pts$y <- as.numeric(cut(rank(agg_pts$y), breaks = sqrt(n)))
 
-spec_pts <- rbind(agg_pts, 
-      rand_pts)
+agg_pts <- agg_pts %>% group_by(y) %>%
+  transmute(x = rank(x),
+            type = type,
+            species = species)
 
-xvals <- seq(.10, .9, by = .2)
-yvals <- seq(.10, .9, by = .2)
-tile_pts <- data.frame( x = rep(xvals, length(xvals)), 
-                        y = sort(rep(yvals, length(yvals))))
-width = .1
+summary(agg_pts$species)
 
-ggplot(aes(x = x,
-           y = y,
-           color = species),
-       data = spec_pts) +
-  geom_tile(aes(color = NULL), data = tile_pts,
-            width = width * 2,
-            height = width * 2,
-            fill = "white",
-            color = "black",
-            lwd = 1
-           ) +   
-  geom_point(color = 'black', size = 6) + 
-  geom_point(size = 5) + 
-  theme(panel.background = element_rect(fill = "white")) + 
+agg_pts %>% ggplot(aes(x = x,
+                       y = y,
+                       fill = species)) +
+  geom_tile(color = "black") +
+  geom_hline(yintercept = seq(0, sqrt(n), by = 3) + .5, size = 2) +
+  geom_vline(xintercept = seq(0, sqrt(n), by = 3) + .5, size = 2)
+
+samp_tiles <- data.frame(xvals = rep(seq(1, 7, 1), 7),
+                         yvals = sort(rep(seq(1, 7, 1), 7)),
+                         sno = c(1:49))
+
+agg_pts$xvals = ceiling(agg_pts$x / 2)
+agg_pts$yvals = ceiling(agg_pts$y / 2)
+
+agg_pts <- left_join(agg_pts, samp_tiles)
+
+rand_pts$y <- as.numeric(cut(rank(rand_pts$y), breaks = sqrt(n)))
+
+rand_pts <- rand_pts %>% group_by(y) %>%
+  transmute(x = rank(x),
+            type = type,
+            species = species)
+
+rand_pts %>% ggplot(aes(x = x,
+                       y = y,
+                       fill = species)) +
+  geom_tile(color = "black") +
+  geom_hline(yintercept = seq(0, 20, by = 3) + .5, size = 2) +
+  geom_vline(xintercept = seq(0, 20, by = 3) + .5, size = 2)
+
+rand_pts$xvals = ceiling(rand_pts$x / 2)
+rand_pts$yvals = ceiling(rand_pts$y / 2)
+
+rand_pts <- left_join(rand_pts, samp_tiles)
+
+toplot <- bind_rows(rand_pts, agg_pts)
+
+toplot$species <- factor(toplot$species)
+
+toplot %>% 
+  ggplot(aes(x = x,
+                      y = y,
+                      fill = species)) +
+  geom_tile(color = "black", width = .8, height = .8) +
+  geom_hline(yintercept = seq(0, 15, by = 2) + .5, size = 1) +
+  geom_vline(xintercept = seq(0, 15, by = 2) + .5, size = 1) +
   facet_wrap(~type) +
-  guides(color = "none") + 
-  scale_colour_brewer(palette = "Set1")
+  theme_bw() + 
+  scale_fill_viridis(discrete = TRUE, option = "plasma")
 
-tile_pts$xhigh <- tile_pts$x + width
-tile_pts$xlow <-tile_pts$x - width
-tile_pts$yhigh <- tile_pts$y + width
-tile_pts$ylow <-tile_pts$y - width
+#ggsave("Figures/sim_communities.jpeg", width = 14, height = 7)
 
-library(tidyr); library(dplyr); library(tidyverse)
-install.packages("tidyselect")
+library(tidyr)
+#install.packages("purrr")
+source("Scripts/ens_specaccum.R")
 
-agg_sum <- data.frame(species1 = NA,
-                      species2 = NA,
-                      species3 = NA,
-                      species4 = NA,
-                      species5 = NA,
-                      species6 = NA)
+agg_curves <- agg_pts %>% group_by(sno, xvals, yvals) %>% count(species) %>% spread(key = species, value = n, fill = 0)
 
-ran_sum <- agg_sum
+agg_spatial <- data.frame(div = jost_specaccum_v2(com.data = agg_curves[,-c(1:3)],
+                  com.ids = agg_curves[,c(1:3)],
+                  q.value = 0,
+                  spatial.columns = c("xvals","yvals"))[[1]])
 
-for(i in 1:nrow(tile_pts)){
-  agg_data <- spec_pts %>% filter(type == "agg" &
-                        x > tile_pts$xlow[i] &
-                        x < tile_pts$xhigh[i] &
-                        y > tile_pts$ylow[i] &
-                        y < tile_pts$yhigh[i])
-  
-  if(nrow(agg_data) > 1){
-    agg_sum <- bind_rows(agg_sum, agg_data %>% 
-                           group_by(species) %>% summarise(count = n()) %>% spread(species, count))
-  }else{
-    agg_sum <- bind_rows(agg_sum, data.frame(species1 = NA,
-                                             species2 = NA,
-                                             species3 = NA,
-                                             species4 = NA,
-                                             species5 = NA,
-                                             species6 = NA))
-  }
+agg_spatial$samp <- c(1:nrow(agg_spatial))
 
-  rand_data <- spec_pts %>% filter(type == "rand" &
-                                    x > tile_pts$xlow[i] &
-                                    x < tile_pts$xhigh[i] &
-                                    y > tile_pts$ylow[i] &
-                                    y < tile_pts$yhigh[i])
-  
-  if(nrow(rand_data) > 1){
-    ran_sum <- bind_rows(ran_sum, rand_data %>% 
-                           group_by(species) %>% summarise(count = n()) %>% spread(species, count))
-  }else{
-    ran_sum <- bind_rows(ran_sum, data.frame(species1 = NA,
-                                             species2 = NA,
-                                             species3 = NA,
-                                             species4 = NA,
-                                             species5 = NA,
-                                             species6 = NA))
-  }
-  
- 
-  
+out <- list()
+for(reps in c(1:99)){
+  agg_random <- jost_specaccum_v2(com.data = agg_curves[,-c(1:3)][sample(1:nrow(agg_curves), nrow(agg_curves), replace = FALSE),],
+                                  com.ids = agg_curves[,c(1:3)],
+                                  q.value = 0,
+                                  spatial.columns = c("xvals","yvals"))[[1]]
+  out[[reps]] <- data.frame(samp = c(1:length(agg_random)), div = agg_random)
 }
 
-agg_com <- cbind(tile_pts[,1:2], agg_sum[-1,])
-rand_com <- cbind(tile_pts[,1:2], ran_sum[-1,])
+agg_random <- bind_rows(out) %>% group_by(samp) %>% summarise(div = mean(div))
+
+rand_curves <- rand_pts %>% group_by(sno, xvals, yvals) %>% count(species) %>% spread(key = species, value = n, fill = 0)
+
+rand_spatial <- data.frame(div = jost_specaccum_v2(com.data = rand_curves[,-c(1:3)],
+                                 com.ids = rand_curves[,c(1:3)],
+                                 q.value = 0,
+                                 spatial.columns = c("xvals","yvals"))[[1]])
+rand_spatial$samp <- c(1:nrow(rand_spatial))
+
+out <- list()
+for(reps in c(1:99)){
+  rand_random <- jost_specaccum_v2(com.data = rand_curves[,-c(1:3)][sample(1:nrow(rand_curves), nrow(rand_curves), replace = FALSE),],
+                                  com.ids = rand_curves[,c(1:3)],
+                                  q.value = 0,
+                                  spatial.columns = c("xvals","yvals"))[[1]]
+  out[[reps]] <- data.frame(samp = c(1:length(rand_random)), div = rand_random)
+}
+
+rand_random <- bind_rows(out) %>% group_by(samp) %>% summarise(div = mean(div))
+
+library(ggthemes)
+
+ggplot(aes(x = samp,
+           y = div), 
+       data = agg_spatial) +
+  geom_line(color = "blue", size = 1.5) +
+  geom_line(data = agg_random, color = "blue", linetype = 2, size = 1.5) +
+  geom_line(data = rand_spatial, color = "red", size = 1.5) +
+  geom_line(data = rand_random, linetype = 2, color = "red", size = 1.5) +
+  # ylim(5, 10) +
+  xlim(0, 50) + 
+  theme_few() +
+  theme(text = element_text(size=25))
+  # theme(axis.line.x = element_line(color="black", size = .5),
+  #        axis.line.y = element_line(color="black", size = .5))
+
+#ggsave("Figures/curve_examples_firstcurve.jpeg", width = 8, height = 7)
+
+ggplot(aes(x = samp,
+           y = div), 
+       data = agg_spatial) +
+  geom_line(color = "blue", size = 1.5) +
+  geom_line(data = agg_random, color = "blue", linetype = 2, size = 1.5) +
+  geom_line(data = rand_spatial, color = "red", size = 1.5) +
+  geom_line(data = rand_random, linetype = 2, color = "red", size = 1.5) +
+  # ylim(5, 10) +
+  xlim(0, 50) + 
+  theme_few() +
+  theme(text = element_text(size=25))
+# theme(axis.line.x = element_line(color="black", size = .5),
+#        axis.line.y = element_line(color="black", size = .5))
+
+#ggsave("Figures/curve_examples_secondcurve.jpeg", width = 8, height = 7)
+
+data.frame(samp = agg_spatial$samp,
+           spat_div = agg_spatial$div - rand_spatial$div,
+           rand_div = agg_random$div - rand_random$div,
+           agg_effect = (agg_spatial$div - rand_spatial$div) - (agg_random$div - rand_random$div)) %>%
+  ggplot(aes(x = samp)) +
+  geom_ribbon(aes(ymin = -rand_div, ymax = -spat_div), size = 1, linetype = 4, alpha = .5, fill = "forestgreen") + 
+  #geom_polygon(aes(y = spat_div), size = 1, linetype = 4, alpha = 1, fill = "white") + 
+  geom_line(aes(y = -spat_div), size = 2) +
+  geom_line(aes(y = -rand_div), size = 2, linetype = 2) +
+  geom_line(aes(y = -agg_effect), linetype = 1, color = "forestgreen", size = 2) +
+  geom_hline(yintercept = 0) +
+  theme_few() +
+  theme(axis.line.x = element_line(color="black", size = .5),
+        axis.line.y = element_line(color="black", size = .5)) +
+  theme(text = element_text(size=25)) + 
+  ylim(-2, 2)
+
+#ggsave("Figures/response_examples_withhighlight.jpeg", width = 8, height = 7)
 
 
-source("./Scripts/jost_specaccum.R")
+data.frame(samp = agg_spatial$samp,
+           spat_div = agg_spatial$div - rand_spatial$div,
+           rand_div = agg_random$div - rand_random$div,
+           agg_effect = (agg_spatial$div - rand_spatial$div) - (agg_random$div - rand_random$div)) %>%
+  ggplot(aes(x = samp)) +
+  #geom_ribbon(aes(ymin = -rand_div, ymax = -spat_div), size = 1, linetype = 4, alpha = .5, fill = "forestgreen") + 
+  #geom_polygon(aes(y = spat_div), size = 1, linetype = 4, alpha = 1, fill = "white") + 
+  geom_line(aes(y = -spat_div), size = 2) +
+  geom_line(aes(y = -rand_div), size = 2, linetype = 2) +
+  #geom_line(aes(y = -agg_effect), linetype = 1, color = "forestgreen", size = 2) +
+  geom_hline(yintercept = 0) +
+  theme_few() +
+  theme(axis.line.x = element_line(color="black", size = .5),
+        axis.line.y = element_line(color="black", size = .5)) +
+  theme(text = element_text(size=25)) + 
+  ylim(-2, 2)
 
-agg_com[is.na(agg_com)] <- 0
+#ggsave("Figures/response_examples_nohighlight.jpeg", width = 8, height = 7)
+# Alpha/Beta/Gamma Diversity Values
 
-agg_output <- jost_specaccum(
-  com.data = agg_com[,3:6],
-  com.ids = agg_com[,1:2],
-  n.perm = n.perm,
-  q.value = 1,
-  spatial.columns = c("x", "y"),
-  accumulation.order = "spatial")
+library(vegan)
 
-agg_output_rand <- jost_specaccum(
-  com.data = agg_com[,3:6],
-  com.ids = agg_com[,1:2],
-  n.perm = 999,
-  q.value = 1,
-  spatial.columns = c("x", "y"),
-  accumulation.order = "random")
+alpha = data.frame(agg = rowSums(agg_curves[,3:ncol(agg_curves)] > 0),
+                   rand = rowSums(rand_curves[,3:ncol(rand_curves)] > 0))
+
+for_fig = alpha %>% gather() 
+for_fig$stat = rep("alpha", nrow(for_fig))
+for_fig = bind_rows(for_fig, data.frame(key = c("agg", "rand", "agg", "rand", "agg", "rand"),
+                                        value = c(6, 4, 
+                                                 6 /  mean(for_fig$value[for_fig$key == "agg"]) ,
+                                                  4 / mean(for_fig$value[for_fig$key == "rand"]),
+                                                 mean(for_fig$value[for_fig$key == "agg"]),
+                                                 mean(for_fig$value[for_fig$key == "rand"])),
+                                        stat = c("gamma", "gamma", "beta", "beta", "alpham", "alpham")))
 
 
-rand_com[is.na(rand_com)] <- 0
 
-rand_output <- jost_specaccum(
-  com.data = rand_com[,3:6],
-  com.ids = rand_com[,1:2],
-  n.perm = 999,
-  q.value = 1,
-  spatial.columns = c("x", "y"),
-  accumulation.order = "spatial")
+ggplot() + 
+  geom_point(aes(x = as.factor(key), y = value), color ="black", 
+             data = for_fig[for_fig$stat == "alpham",], size = 5) +
+  
+  geom_point(aes(x = as.factor(key), y = value, color = key), 
+               data = for_fig[for_fig$stat == "alpham",], size = 4) +
 
-rand_output_rand <- jost_specaccum(
-  com.data = rand_com[,3:6],
-  com.ids = rand_com[,1:2],
-  n.perm = 999,
-  q.value = 1,
-  spatial.columns = c("x", "y"),
-  accumulation.order = "random")
+  geom_point(aes(x = as.factor(key), y = value), color = "black", 
+             data = for_fig[for_fig$stat %in% c("gamma", "beta"),],
+             size = 5) +
+  geom_point(aes(x = as.factor(key), y = value, color = key), 
+               data = for_fig[for_fig$stat %in% c("gamma", "beta"),],
+             size = 4) +
 
-curvedat <- cbind(type = c("rand", "agg"),
-      rbind(data.frame(rand_output$spec.accum) %>% summarise_all(., .funs = mean),
-      data.frame(agg_output$spec.accum) %>% summarise_all(., .funs = mean))) %>%
-  gather(key = "plots",
-         value = "diversity",
-         -c(1))
-curvedat_rand <- cbind(type = c("rand", "agg"),
-                  rbind(data.frame(rand_output_rand$spec.accum) %>% summarise_all(., .funs = mean),
-                        data.frame(agg_output_rand$spec.accum) %>% summarise_all(., .funs = mean))) %>%
-  gather(key = "plots",
-         value = "diversity",
-         -c(1))
+  facet_wrap(~stat) + 
+  ylim(0, 7) +
+  theme_few() + 
+  theme(text = element_text(size=25),
+        axis.text.x = element_text(angle=90, hjust=1))  +
+  theme(axis.line.x = element_line(color="black", size = 1),
+        axis.line.y = element_line(color="black", size = 1))
 
-curvedat$plots <- as.numeric(gsub("X", "", curvedat$plots))
-curvedat_rand$plots <- as.numeric(gsub("X", "", curvedat$plots))
+#ggsave("Figures/twoscale_example.jpeg", width = 5, height = 5)
 
-ggplot(aes(x = plots,
-           y = diversity,
-           color = type),
-       data = curvedat) + 
-  stat_smooth(span = 1.35,
-              se = FALSE) + 
-  stat_smooth(span = 1.2,
-              se = FALSE,
-              lty = 2,
-              data = curvedat_rand) +
-  # # Plotting NLS regression line
-  # stat_smooth(method = "nls",
-  #            formula = y ~ a*x^b,
-  #            method.args = list(start = c(a = 1,
-  #                                         b = 1)),
-  #            se = FALSE,
-  #            lwd = 2) +
-  # stat_smooth(method = "nls",
-  #             formula = y ~ a*x^b,
-  #             method.args = list(start = c(a = 1,
-  #                                          b = 1)),
-  #             se = FALSE,
-  #             lwd = 2,
-  #             data = curvedat_rand,
-  #             lty = 2, fullrange = T) +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        plot.title = element_text(size = 24)) +
-  xlab("Number of Plots") +
-  ylab("Community Diversity") +
-  ggtitle("Diversity Accumulation") + 
-  theme(panel.background = element_rect(fill = "white"))
+samp_tiles$ord <- rank(sqrt(samp_tiles[,1] ^ 2 + samp_tiles[,2] ^ 2), ties.method = "first")
+
+samporder <- list()
+for(i in unique(samp_tiles$ord)){
+  samporder[[i]] <- bind_cols(samp_tiles[samp_tiles$ord <= i,],
+                              data.frame(plotorder = rep(i, nrow(samp_tiles[samp_tiles$ord <= i,]))))
+}
+
+spat_tiles <- bind_rows(samporder)
+colnames(spat_tiles)[1:2] <- c("x", "y")
+spat_tiles$x <- spat_tiles$x * 2 - .5
+spat_tiles$y <- spat_tiles$y * 2 - .5
+spat_tiles$plotorder <- as.numeric(spat_tiles$plotorder)
+
+p <- toplot%>% ggplot(aes(x = x,
+                      y = y)) +
+  geom_tile(color = "black", width = .8, height = .8, aes(fill = species),
+            data = toplot[toplot$type == "agg",]) +
+  
+  geom_tile(color = "black", width = .8, height = .8, aes(fill = species),
+            data = toplot[toplot$type == "rand",]) +
+  #geom_hline(yintercept = seq(0, 15, by = 2) + .5, size = 1) +
+  #geom_vline(xintercept = seq(0, 15, by = 2) + .5, size = 1) +
+  #facet_wrap(~type) +
+  guides(fill = NULL) +
+  theme_few() + 
+  # facet_wrap(~type, ncol = 1) +
+  scale_fill_viridis(discrete = TRUE, option = "plasma") +
+  geom_tile(fill = "white", 
+            alpha = .5, 
+            data = spat_tiles, 
+            color = "black", 
+            size = 2) +
+  transition_components(sno, plotorder, enter_length = 1, exit_length = 1) +
+  enter_fade() + 
+  exit_shrink() +
+  ease_aes('sine-in-out')
+
+animate(p, nframes = 300, fps = 50)
+
+# At Random
+
+
+samp_tiles$ord <- sample(c(1:nrow(samp_tiles)), nrow(samp_tiles))
+
+samporder <- list()
+for(i in unique(samp_tiles$ord)){
+  samporder[[i]] <- bind_cols(samp_tiles[samp_tiles$ord <= i,],
+                              data.frame(plotorder = rep(i, nrow(samp_tiles[samp_tiles$ord <= i,]))))
+}
+
+spat_tiles <- bind_rows(samporder)
+colnames(spat_tiles)[1:2] <- c("x", "y")
+spat_tiles$x <- spat_tiles$x * 2 - .5
+spat_tiles$y <- spat_tiles$y * 2 - .5
+spat_tiles$plotorder <- as.numeric(spat_tiles$plotorder)
+
+p <- ggplot() +
+  geom_tile(mapping = aes(fill = species, x = x, y = y), 
+            data = data.frame(toplot[toplot$type == "agg",]), 
+            color = "black", width = .8, height = .8
+  ) +
+  #geom_hline(yintercept = seq(0, 15, by = 2) + .5, size = 1) +
+  #geom_vline(xintercept = seq(0, 15, by = 2) + .5, size = 1) +
+  #facet_wrap(~type) +
+  guides(fill = NULL) +
+  theme_few() + 
+  scale_fill_viridis(discrete = TRUE, option = "plasma") +
+  geom_tile(aes(x = x, y = y),
+            fill = "white", 
+            alpha = .5, 
+            data = spat_tiles, 
+            color = "black", 
+            size = 2) +
+  transition_components(sno, plotorder, enter_length = 1, exit_length = 1) +
+  enter_fade() + 
+  exit_shrink() +
+  ease_aes('sine-in-out')
+
+animate(p, nframes = 300, fps = 50)
+
+
+# Rand community
+
+p <- ggplot() +
+  geom_tile(mapping = aes(fill = species, x = x, y = y), 
+            data = data.frame(toplot[toplot$type == "agg",]), 
+            color = "black", width = .8, height = .8
+  ) +
+  geom_tile(mapping = aes(fill = species, x = x, y = y), 
+            data = data.frame(toplot[toplot$type == "rand",]), 
+            color = "black", width = .8, height = .8
+            ) +
+  #geom_hline(yintercept = seq(0, 15, by = 2) + .5, size = 1) +
+  #geom_vline(xintercept = seq(0, 15, by = 2) + .5, size = 1) +
+  #facet_wrap(~type) +
+  guides(fill = NULL) +
+  theme_few() + 
+  scale_fill_viridis(discrete = TRUE, option = "plasma") +
+  geom_tile(aes(x = x, y = y),
+            fill = "white", 
+            alpha = .5, 
+            data = spat_tiles, 
+            color = "black", 
+            size = 2) +
+  transition_components(sno, plotorder, enter_length = 1, exit_length = 1) +
+  enter_fade() + 
+  exit_shrink() +
+  ease_aes('sine-in-out')
+
+animate(p, nframes = 300, fps = 50)

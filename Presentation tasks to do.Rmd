@@ -1,0 +1,23 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+Still need to do:
+
+* Quantify what species, exactly, are missing from each dataset
+    * What is lacking at the gamma scale?
+  
+* Random vs. spatial curves seems fine
+
+* What sites to throw out due to disturbance?
+  * HREC 1 (yes)
+  * MCLA 1 (maybe)
+  * HREC 2 (no)
+  
+* What is going on in 2017, sites at SFREC?
+  * SFREC 4
+  * SFREC 3
+  * SFREC 2
+
+* I think the story here is that we see effects on species richness at small scales, but not at smaller scales
+* Instead, when we keep track of abundance, we __do__ still see effects at large spatial scles

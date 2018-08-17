@@ -1,0 +1,316 @@
+---
+title: "Two-scale analysis with permutations"
+output: html_notebook
+---
+
+```{r}
+library(lmPerm)
+library(dplyr)
+source("ens_specaccum.R")
+
+final_merged <- read.csv("../final_2018.csv", header = TRUE, stringsAsFactors = FALSE)
+head(final_merged)[,1:20]
+```
+
+```{r}
+com.mat <- final_merged %>% select(- one_of("site", "block", "plot", "subplot", "x", "y", 
+                                            "note", "index", "year", "sitename", "dateestablished", 
+                                            "plotlocation", "fertilized", "X"))
+com.attr <-  final_merged %>% select(one_of("site", "block", "plot", "subplot", "x", "y", 
+                                            "note", "index", "year", "sitename", "dateestablished", 
+                                            "plotlocation", "fertilized"))
+
+dfun = d_calc
+
+com_norm <- normalize_rows(com.mat)
+unique(rowSums(com_norm)) == 1
+
+# Sample (alpha) diversity
+alpha_q0 = apply(com_norm, 1, dfun, q = 0, sample.weight = 1)
+alpha_q1 = apply(com_norm, 1, dfun, q = 1, sample.weight = 1)
+alpha_q2 = apply(com_norm, 1, dfun, q = 2, sample.weight = 1)
+
+# Combining alpha statistics to a single dataframe
+alpha.stats <- cbind(com.attr, alpha_q0, alpha_q1, alpha_q2) %>% 
+  group_by(site, block, plot, fertilized, year) %>%
+  summarise_at(c("alpha_q0", "alpha_q1", "alpha_q2"), mean)
+
+alpha.raw <- cbind(com.attr, alpha_q0, alpha_q1, alpha_q2)
+
+# Aggregating to generate gamma diversity matrix
+com.gamma <- bind_cols(select(com.attr, site, block, plot, year, fertilized), com.mat) %>% 
+  group_by(site, block, plot, year, fertilized) %>%
+  summarise_all(sum)
+
+# Generating gamma diversity dataset
+gamma.attr <- com.gamma[,1:5]
+gamma.norm <- normalize_rows(com.gamma[,-(1:5)])
+
+# Total (gamma) diversity
+gamma_q0 = apply(gamma.norm, 1, dfun, q = 0, sample.weight = 1)
+gamma_q1 = apply(gamma.norm, 1, dfun, q = 1, sample.weight = 1)
+gamma_q2 = apply(gamma.norm, 1, dfun, q = 2, sample.weight = 1)
+
+gamma.stats <- cbind(data.frame(gamma.attr), gamma_q0, gamma_q1, gamma_q2)
+
+# Combining into a single dataframe
+alldiv.stats <- inner_join(alpha.stats, gamma.stats) %>%
+  mutate(beta_q0 = gamma_q0 / alpha_q0,
+         beta_q1 = gamma_q1 / alpha_q1,
+         beta_q2 = gamma_q2 / alpha_q2)
+```
+
+# Statistical analysis:
+
+## What is the correct model structure:
+
+* Repeated measures (each plot over time)
+* Blocking and within-site variance
+* Treatment effects (1 and 2 years)
+* Treatment treated as linear vs. nonlinear?
+* Interannual variation
+
+## I think the most appropriate command is:
+
+* Div ~ treatment x as.factor(year) + (1 | site/block)
+
+# Alpha-scale analysis
+```{r}
+library(lme4)
+library(lmerTest)
+
+# Filter out one block at HREC?
+alpha.raw <- alpha.raw %>% filter(! ((site == "HREC") & (block == 1))) 
+head(alpha.raw)
+
+alpha.raw$site <- as.factor(alpha.raw$site) # Site as factor
+alpha.raw$block <- as.factor(alpha.raw$block) # Block as factor
+alpha.raw$fert_num <- alpha.raw$fertilized * (alpha.raw$year - 2016)
+alpha.raw$fertilized <- as.factor(alpha.raw$fertilized) # Fertilization as factor
+alpha.raw$year <- alpha.raw$year - 2016 # Year as range of 1-2
+alpha.raw$year <- as.factor(alpha.raw$year) # Y
+
+```
+
+```{r}
+mod1_q0 <- lmer(alpha_q0 ~ factor(fert_num) + factor(year) + (1|site) + (1|site:block), data = alpha.raw)
+summary(mod1_q0)
+anova(mod1_q0)
+qqnorm(scale(resid(mod1_q0)))
+abline(b = 1, a = 0)
+```
+
+```{r}
+mod1_q1 <- lmer(alpha_q1 ~ factor(fert_num) + factor(year) + (1|site) + (1|site:block), data = alpha.raw)
+summary(mod1_q1)
+anova(mod1_q1)
+qqnorm(scale(resid(mod1_q1)))
+abline(b = 1, a = 0)
+```
+```{r}
+mod1_q2 <- lmer(alpha_q2 ~ factor(fert_num) + factor(year) + (1|site) + (1|site:block), data = alpha.raw)
+summary(mod1_q2)
+anova(mod1_q2)
+qqnorm(scale(resid(mod1_q2)))
+abline(b = 1, a = 0)
+```
+
+# Gamma and beta diversity analysis
+
+- Question of whether or not to normalize prior to analysis?
+
+```{r}
+
+# For a given matrix
+permtest <- function(com.mat, qval, perm){
+  
+  require(testthat)
+  
+  # Take all the rows and split them into two groups
+  alpha.split <- base::sample(x = c(1:nrow(com.mat)), size = (nrow(com.mat) / 2))
+  com.F <- com.mat[alpha.split,]
+  com.UF <- com.mat[-(alpha.split),]
+  
+  # Equal sizes?
+  expect_true(nrow(com.F) == nrow(com.UF))
+  
+  # Normalize, calc alpha diversity of each group and store
+  alpha_fert <- apply(normalize_rows(com.F), 1, dfun, q = qval, sample.weight = 1)
+  alpha_unfert <- apply(normalize_rows(com.UF), 1, dfun, q = qval, sample.weight = 1)
+  
+  # Aggregate up to the gamma scale
+  gam.F <-apply(com.F, 2, sum)
+  gam.UF <- apply(com.UF, 2, sum)
+  
+  # Calculate gamma level diversity statistics
+  gamma_fert = dfun(gam.F/ sum(gam.F), q = qval, sample.weight = 1)
+  gamma_unfert = dfun(gam.UF/ sum(gam.UF), q = qval, sample.weight = 1)
+
+  # Calculate beta diversity of each group and store
+  beta_fert = gamma_fert / mean(alpha_fert)
+  beta_unfert = gamma_unfert / mean(alpha_unfert)
+
+  # Return data set
+  return(data.frame(fert = c(1, 0),
+                    perm = c(perm, perm),
+                    alpha = c(mean(alpha_fert), mean(alpha_unfert)),
+                    beta = c(beta_fert, beta_unfert),
+                    gamma = c(gamma_fert, gamma_unfert)))
+  
+}
+
+permtest(com.mat, qval = 0, perm = 1)
+
+```
+
+# Repeat for each value of Q
+
+# Q = 0
+```{r}
+
+permtest_repeat <- function(com.mat, qval, perm, perm.total){
+  
+  output <- list()
+  while(perm < perm.total){
+    permstore <- permtest(com.mat, qval, perm)
+    output[[perm]] <- data.frame(permstore)
+    perm <- perm + 1
+  }
+  return(bind_rows(output))
+}
+
+full_perm <- com.attr %>% select(site, block, year) %>%
+  bind_cols(com.mat) %>%
+  group_by(site, block, year) %>%
+  do(permtest_repeat(.[4:ncol(.)], qval = 0, perm = 1, perm.total = 99999))
+
+write.csv(x = full_perm, "../twoscale_perm_q0.csv")
+```
+
+```{r}
+library(ggplot2)
+perm_summary <- full_perm %>% group_by(site, block, year, perm) %>%
+  summarise(diff_alpha = alpha[fert == 0] - alpha[fert == 1],
+            diff_beta = beta[fert == 0] - beta[fert == 1],
+            diff_gamma = gamma[fert == 0] - gamma[fert == 1])
+
+perm_summary %>% 
+  ggplot(aes(x = diff_alpha, color = as.factor(year))) +
+  geom_density() +
+  facet_grid(block~site)
+```
+```{r}
+perm_summary %>% 
+  ggplot(aes(x = diff_beta, color = as.factor(year))) +
+  geom_density() +
+  facet_grid(block~site)
+```
+
+```{r}
+perm_summary %>% 
+  ggplot(aes(x = diff_gamma, color = as.factor(year))) +
+  geom_density() +
+  facet_grid(block~site)
+```
+
+
+# Q = 1
+```{r}
+perm.total <- 10
+
+permtest_repeat <- function(com.mat, qval, perm, perm.total){
+  
+  output <- list()
+  while(perm < perm.total){
+    permstore <- permtest(com.mat, qval, perm)
+    output[[perm]] <- data.frame(permstore)
+    perm <- perm + 1
+  }
+  return(bind_rows(output))
+}
+
+full_perm <- com.attr %>% select(site, block, year) %>%
+  bind_cols(com.mat) %>%
+  group_by(site, block, year) %>%
+  do(permtest_repeat(.[4:ncol(.)], qval = 1, perm = 1, perm.total = 9999))
+
+write.csv(x = full_perm, "../twoscale_perm_q1.csv")
+
+```
+
+```{r}
+library(ggplot2)
+perm_summary <- full_perm %>% group_by(site, block, year, perm) %>%
+  summarise(diff_alpha = alpha[fert == 0] - alpha[fert == 1],
+            diff_beta = beta[fert == 0] - beta[fert == 1],
+            diff_gamma = gamma[fert == 0] - gamma[fert == 1])
+
+perm_summary %>% 
+  ggplot(aes(x = diff_alpha, color = as.factor(year))) +
+  geom_density() +
+  facet_grid(block~site)
+```
+```{r}
+perm_summary %>% 
+  ggplot(aes(x = diff_beta, color = as.factor(year))) +
+  geom_density() +
+  facet_grid(block~site)
+```
+
+```{r}
+perm_summary %>% 
+  ggplot(aes(x = diff_gamma, color = as.factor(year))) +
+  geom_density() +
+  facet_grid(block~site)
+```
+
+
+# Q = 2
+```{r}
+perm.total <- 10
+
+permtest_repeat <- function(com.mat, qval, perm, perm.total){
+  
+  output <- list()
+  while(perm < perm.total){
+    permstore <- permtest(com.mat, qval, perm)
+    output[[perm]] <- data.frame(permstore)
+    perm <- perm + 1
+  }
+  return(bind_rows(output))
+}
+
+full_perm <- com.attr %>% select(site, block, year) %>%
+  bind_cols(com.mat) %>%
+  group_by(site, block, year) %>%
+  do(permtest_repeat(.[4:ncol(.)], qval = 2, perm = 1, perm.total = 9999))
+
+write.csv(x = full_perm, "../twoscale_perm_q2.csv")
+```
+
+```{r}
+library(ggplot2)
+perm_summary <- full_perm %>% group_by(site, block, year, perm) %>%
+  summarise(diff_alpha = alpha[fert == 0] - alpha[fert == 1],
+            diff_beta = beta[fert == 0] - beta[fert == 1],
+            diff_gamma = gamma[fert == 0] - gamma[fert == 1])
+
+perm_summary %>% 
+  ggplot(aes(x = diff_alpha, color = as.factor(year))) +
+  geom_density() +
+  facet_grid(block~site)
+```
+```{r}
+perm_summary %>% 
+  ggplot(aes(x = diff_beta, color = as.factor(year))) +
+  geom_density() +
+  facet_grid(block~site)
+```
+
+```{r}
+perm_summary %>% 
+  ggplot(aes(x = diff_gamma, color = as.factor(year))) +
+  geom_density() +
+  facet_grid(block~site)
+```
+

@@ -94,8 +94,13 @@ for(colname in unique(col_labs$NewVal)){
   oldcols = col_labs$ColVal[col_labs$NewVal == colname]
     
   toadd = peak_dat %>% 
-    select(oldcols) %>% unite(new, sep = "")
-    
+    select(oldcols)
+  
+  toadd = sapply(toadd, as.numeric)
+  toadd[is.na(toadd)] <- 0
+  
+  toadd = apply(toadd, 1, FUN = function(x){return(max(x))})
+  toadd = data.frame(toadd)
   names(toadd) = tolower(colname)
     
   clean_dat <- clean_dat %>% bind_cols(toadd)
@@ -194,19 +199,25 @@ for(colname in unique(col_labs$NewVal)){
   oldcols = col_labs$ColVal[col_labs$NewVal == colname]
   
   toadd = spring_dat %>% 
-    select(oldcols) %>% unite(new, sep = "")
+    select(as.character(oldcols))
   
+  toadd = sapply(toadd, as.numeric)
+  toadd[is.na(toadd)] <- 0
+  
+  toadd = apply(toadd, 1, FUN = function(x){return(max(x))})
+  toadd = data.frame(toadd)
   names(toadd) = tolower(colname)
-    
-  clean_dat <- clean_dat %>% bind_cols(toadd)
   
-
+  clean_dat <- clean_dat %>% bind_cols(toadd)
 }
 
 spring_merged <- clean_dat
 
 write.csv(x = spring_merged, "2018/merged_data_2018_spring.csv")
 
+
+str(spring_merged)
+str(peak_merged)
 ################################################################################
 # Merging by cover (Only taking highest cover per sampling event)
 
