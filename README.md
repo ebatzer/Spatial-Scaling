@@ -13,8 +13,13 @@ Conducting experiments that occur over multiple scales can shed insights into a 
 ## Organization
 
 **Presentations:** Powerpoints and associated figures 
+
 **Scripts:** Data cleaning and analysis scripts 
+
 **Docs:** Documents detailing project management 
+
 **Figures:** Data visualization and descriptive figures 
+
 **Citations:** Useful paper repository 
+
 
