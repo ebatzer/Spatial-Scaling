@@ -1,3 +1,0 @@
-"0","```r
-hist(rowSums(comp.wide))
-```"

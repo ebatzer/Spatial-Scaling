@@ -1,6 +1,0 @@
-"0","```r
-q0_spatial_summary %>%
-  ggplot(aes(x = as.numeric(samp))) +
-  geom_line(aes(y = -diff_frac, linetype = paste(site, block), color = year)) +
-  ggtitle(\"difference at q = 0\")
-```"

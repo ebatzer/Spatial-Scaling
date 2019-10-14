@@ -1,6 +1,0 @@
-"0","sumtable %>% "
-"0","  filter(!is.na(Startdateyear)) %>%"
-"0","  filter(Startdateyear > 1985) %>%"
-"0","  ggplot(aes(x = factor(Startdatemonth), fill = factor(Startdatemonth), y = count)) +"
-"0","  geom_histogram(stat = ""identity"", position = position_dodge())"
-"2","Ignoring unknown parameters: binwidth, bins, pad"

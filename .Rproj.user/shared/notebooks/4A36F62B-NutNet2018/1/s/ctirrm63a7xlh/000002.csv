@@ -1,8 +1,0 @@
-"0","# Permutational ANOVA
-mod_anov <- adonis(com.mat ~ trt:year_trt, strata = com.attr$site + com.attr$site : com.attr$block, 
-                    permutations = 10,
-                   data = com.attr)
-"
-"2","Error in terms.formula(formula, data = data) : 
-  object 'com.attr' not found
-"

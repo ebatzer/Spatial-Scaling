@@ -1,3 +1,0 @@
-"0","```r
-wide.comp <- cbind(data.frame(comp.attr), data.frame(comp.wide))
-```"
