@@ -1,0 +1,230 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r, include = F}
+# Call packages
+library(testthat);library(tidyr);library(dplyr)
+```
+
+```{r}
+# Grab compute_hilldiv function
+source("../NutNet/NutNetTemporalScaling/Scripts/computinghillnumbers.R")
+
+# Read in community matrix and identification CSVs
+com.matrix <- read.csv("./2016/alldatacombined2016.csv")
+com.ids <- read.csv("./2016/alldataidentification2016.csv")
+
+names(com.ids)[6] <- "site_code"
+names(com.ids)[4] <- "trt"
+com.ids[,4] <- c(com.ids$subplotres)
+head(com.ids)
+
+# Making sure all values in matrix are numeric
+for(i in 1:ncol(com.matrix)){
+  if(typeof(com.matrix[,i]) != "double"){
+    com.matrix[,i] <- as.numeric(com.matrix[,i])
+  }
+}
+
+# Removing non-plant columns
+com.matrix <- com.matrix[, !names(com.matrix) %in% c("Bare", "Gopher")]
+com.matrix <- com.matrix[order(com.matrix$index),]
+com.ids <- com.ids[order(com.ids$index),]
+com.ids <- com.ids[,names(com.ids)!= "index"]
+com.matrix <- com.matrix[,names(com.matrix)!= "index"]
+```
+
+
+```{r, echo=FALSE}
+divval = 0
+output <- compute_hilldiv(com.matrix = com.matrix,
+                com.id = com.ids,
+                divval = divval,
+                groups = c("block", "year", "site_code", "subplotres"),
+                idcols = c(1:8))
+
+```
+
+```{r}
+
+library(ggplot2)
+div.graphing <- gather(rbind(data.frame(output[[1]][1]),
+      data.frame(output[[2]][1]),
+      data.frame(output[[3]][1]))[,1:11],
+       value = "value",
+      key = "diversity.level",
+      c(9:11))
+
+div.graphing <- cbind(div.graphing,
+      stderr = gather(rbind(data.frame(output[[1]][1]),
+      data.frame(output[[2]][1]),
+      data.frame(output[[3]][1]))[,c(1:8,12:14)],
+      value = "stderr",
+      key = "diversity.level",
+      c(9:11))[,10])
+
+div.graphing$diversity.level[div.graphing$diversity.level == "mean.alpha"] <- "alpha"
+
+p1 <- ggplot(aes(x = diversity.level,
+                 y = value,
+                 color = factor(subplotres),
+                 shape = factor(site_code),
+                 group = subplotres), 
+             data = div.graphing)
+
+p1 + 
+  geom_boxplot(position = position_dodge(width = 1), width = .5) + 
+  facet_wrap(~diversity.level, scales = 'free') +
+  xlab(paste("Diversity Level at q =", divval))
+```
+
+```{r}
+
+alpha.anova <- aov(value ~ as.factor(subplotres) + Error(site_code/block), data = div.graphing[div.graphing$diversity.level == "alpha",])
+
+beta.anova <- aov(value ~ as.factor(subplotres) + Error(site_code/block), data = div.graphing[div.graphing$diversity.level == "beta",])
+
+gamma.anova <- aov(value ~ as.factor(subplotres) + Error(site_code/block), data = div.graphing[div.graphing$diversity.level == "gamma",])
+
+summary(alpha.anova)
+
+```
+
+```{r}
+summary(beta.anova)
+```
+```{r}
+summary(gamma.anova)
+```
+
+```{r, echo=FALSE}
+divval = 1
+output <- compute_hilldiv(com.matrix = com.matrix,
+                com.id = com.ids,
+                divval = divval,
+                groups = c("block", "year", "site_code", "subplotres"),
+                idcols = c(1:8))
+
+```
+
+```{r}
+
+library(ggplot2)
+div.graphing <- gather(rbind(data.frame(output[[1]][1]),
+      data.frame(output[[2]][1]),
+      data.frame(output[[3]][1]))[,1:11],
+      value = "value",
+      key = "diversity.level",
+      c(9:11))
+
+div.graphing <- cbind(div.graphing,
+      stderr = gather(rbind(data.frame(output[[1]][1]),
+      data.frame(output[[2]][1]),
+      data.frame(output[[3]][1]))[,c(1:8,12:14)],
+      value = "stderr",
+      key = "diversity.level",
+      c(9:11))[,10])
+
+div.graphing$diversity.level[div.graphing$diversity.level == "mean.alpha"] <- "alpha"
+
+p1 <- ggplot(aes(x = diversity.level,
+                 y = value,
+                 color = factor(subplotres),
+                 shape = factor(site_code),
+                 group = subplotres), 
+             data = div.graphing)
+
+p1 + 
+  geom_boxplot(position = position_dodge(width = 1), width = .5) + 
+  facet_wrap(~diversity.level, scales = 'free') +
+  xlab(paste("Diversity Level at q =", divval))
+```
+
+```{r}
+
+alpha.anova <- aov(value ~ as.factor(subplotres) + Error(site_code/block), data = div.graphing[div.graphing$diversity.level == "alpha",])
+
+beta.anova <- aov(value ~ as.factor(subplotres) + Error(site_code/block), data = div.graphing[div.graphing$diversity.level == "beta",])
+
+gamma.anova <- aov(value ~ as.factor(subplotres) + Error(site_code/block), data = div.graphing[div.graphing$diversity.level == "gamma",])
+
+summary(alpha.anova)
+```
+```{r}
+summary(beta.anova)
+```
+```{r}
+summary(gamma.anova)
+```
+
+```{r, echo=FALSE}
+divval = 2
+output <- compute_hilldiv(com.matrix = com.matrix,
+                com.id = com.ids,
+                divval = divval,
+                groups = c("block", "year", "site_code", "subplotres"),
+                idcols = c(1:8))
+
+```
+
+```{r}
+
+library(ggplot2)
+div.graphing <- gather(rbind(data.frame(output[[1]][1]),
+      data.frame(output[[2]][1]),
+      data.frame(output[[3]][1]))[,1:11],
+      value = "value",
+      key = "diversity.level",
+      c(9:11))
+
+div.graphing <- cbind(div.graphing,
+      stderr = gather(rbind(data.frame(output[[1]][1]),
+      data.frame(output[[2]][1]),
+      data.frame(output[[3]][1]))[,c(1:8,12:14)],
+      value = "stderr",
+      key = "diversity.level",
+      c(9:11))[,10])
+
+div.graphing$diversity.level[div.graphing$diversity.level == "mean.alpha"] <- "alpha"
+
+p1 <- ggplot(aes(x = diversity.level,
+                 y = value,
+                 color = factor(subplotres),
+                 shape = factor(site_code),
+                 group = subplotres), 
+             data = div.graphing)
+
+p1 + 
+  geom_boxplot(position = position_dodge(width = 1), width = .5) + 
+  facet_wrap(~diversity.level, scales = 'free') +
+  xlab(paste("Diversity Level at q =", divval))
+```
+
+```{r}
+
+alpha.anova <- aov(value ~ as.factor(subplotres) + Error(site_code/block), data = div.graphing[div.graphing$diversity.level == "alpha",])
+
+beta.anova <- aov(value ~ as.factor(subplotres) + Error(site_code/block), data = div.graphing[div.graphing$diversity.level == "beta",])
+
+gamma.anova <- aov(value ~ as.factor(subplotres) + Error(site_code/block), data = div.graphing[div.graphing$diversity.level == "gamma",])
+
+summary(alpha.anova)
+```
+```{r}
+summary(beta.anova)
+```
+```{r}
+summary(gamma.anova)
+```

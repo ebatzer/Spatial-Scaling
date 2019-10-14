@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1532720678828.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "8649D2C",
+    "lastKnownWriteTime" : 1532643019,
+    "last_content_update" : 1532643019,
+    "path" : "C:/Users/ebatz/Box Sync/Eviner lab shared/Evan/Research Projects/Spatial-Scaling/Visualizations/simulating_aggregated_distributions.R",
+    "project_path" : "Visualizations/simulating_aggregated_distributions.R",
+    "properties" : {
+        "cursorPosition" : "350,0",
+        "scrollLine" : "37"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

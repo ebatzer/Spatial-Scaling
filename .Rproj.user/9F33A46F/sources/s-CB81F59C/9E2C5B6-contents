@@ -1,0 +1,42 @@
+spatial_perm <- bind_rows(list(q0_spatial, q1_spatial, q2_spatial))
+
+library(emmeans)
+library(ggthemes)
+qval = 0
+yearval = 2018
+
+loglogcurve <- function(qval, yearval){
+  
+  rare.dat  <- spatial_perm %>% filter(q == qval & year == yearval) %>% filter(site != "HREC")
+  
+  output <- list()
+  
+  for(i in unique(rare.dat$samp)){
+    
+    est <- lm(div ~ factor(fert) + factor(site) + site:factor(block), data = rare.dat[rare.dat$samp == as.numeric(i),])
+    
+    output[[as.numeric(i)]] <- data.frame(samp = c(i,i), emmeans(est, 'fert'))
+  }
+  
+  p <- bind_rows(output) %>%
+    ggplot(aes(x = as.numeric(samp),
+               color = factor(fert))) + 
+    geom_line(aes(y = emmean), size = 2) +
+    geom_line(aes(y = lower.CL), linetype = 2) +
+    geom_line(aes(y = upper.CL), linetype = 2) +
+    theme_fivethirtyeight()
+  
+  return(p)
+}
+
+loglogcurve(0, 2018)
+ggsave("Figures/GeneralCurvesQ0_2018.jpeg", height = 7, width = 10)
+
+loglogcurve(2, 2018)
+ggsave("Figures/GeneralCurvesQ2_2018.jpeg", height = 7, width = 10)
+
+loglogcurve(0, 2017)
+ggsave("Figures/GeneralCurvesQ0_2017.jpeg", height = 7, width = 10)
+
+loglogcurve(2, 2017)
+ggsave("Figures/GeneralCurvesQ2_2017.jpeg", height = 7, width = 10)

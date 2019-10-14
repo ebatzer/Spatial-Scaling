@@ -1,0 +1,101 @@
+---
+title: "Preliminary Shark Exploration"
+output: html_notebook
+---
+
+```{r}
+library(data.table)
+library(ggplot2)
+library(gapminder) # For animations, can remove
+library(gganimate) # For animations, can remove
+library(ggmap)
+
+# Reading in dataframe
+bs = fread("UK_bs_records.csv", header = TRUE, stringsAsFactors = FALSE)
+
+# Converting chr to date
+bs$`Start date` = as.Date(bs$`Start date`,format = "%m/%d/%Y")
+
+# Adding a numeric date column
+bs$numdate = as.numeric(bs$`Start date`)
+
+# Stripping out special characters in column names
+colnames(bs) = gsub(pattern = "[ ,\\/, (, )]", "", colnames(bs))
+
+# Filtering samples without a date, or a date prior to 1985
+bs = bs[!is.na(bs$numdate),]
+bs = bs[bs$Startdateyear > 1985]
+
+# Summary table of observatons (total by month, by year)
+sumtable = bs %>% group_by(Startdatemonth, Startdateyear) %>% summarise(count = n())
+sumtable
+```
+
+# Plotting total observations over time
+```{r}
+bs %>% group_by(Startdatemonth, Startdateyear, StateProvince) %>% summarise(count = n()) %>%
+  ggplot(aes(x = Startdateyear, y = count, fill = Startdateyear)) +
+  geom_histogram(stat = "identity")
+```
+
+# Total observations over time, by month
+
+```{r}
+sumtable %>% 
+  filter(!is.na(Startdateyear)) %>%
+  filter(Startdateyear > 1985) %>%
+  ggplot(aes(x = factor(Startdatemonth), fill = factor(Startdatemonth), y = count)) +
+  geom_histogram(stat = "identity", position = position_dodge())
+```
+
+# Total observations by month in each site
+```{r}
+bs %>% group_by(Startdatemonth, Startdateyear, StateProvince) %>% 
+  summarise(count = n()) %>%
+  ggplot(aes(x = factor(Startdatemonth), fill = factor(Startdatemonth), y = count)) +
+  geom_histogram(stat = "identity", position = position_dodge()) +
+  facet_wrap(~StateProvince) +
+  ggtitle("Total Sightings by Month") +
+  xlab("Month")
+```
+
+# Plotting observations on a map
+
+```{r}
+# Get map from ggmap
+map <- get_map(location = 'UK', zoom = 5, maptype = "toner-lite", color = "bw")
+
+# Plotting map, plus semi-transparent observations
+ggmap(map) +
+  geom_point(data = bs[bs$Startdatemonth %in% c(5,6,7,8,9,10)],
+             aes(y = LatitudeWGS84,
+                 x = LongitudeWGS84,
+                 color = Startdateyear),
+             color = "red", 
+             alpha = .05) +
+  facet_wrap(~Startdatemonth) + # Separate into different panels by month
+  ggtitle("Observations by month")
+
+#ggsave("MonthlyObs.jpeg", width = 10, height = 5)
+
+```
+
+# Creating an animation
+
+Note - creating this gif takes a little while. Just uncomment "animate(p)" to generate it in your viewer panel of Rstudio.
+
+```{r}
+p = ggmap(map) +
+  geom_point(data = bs,
+             aes(y = LatitudeWGS84,
+                 x = LongitudeWGS84,
+                 color = Startdateyear),
+             color = "red", alpha = .5) +
+  transition_events(numdate, enter_length = 500, exit_length = 500) +
+  enter_fade() + 
+  exit_shrink() +
+  ease_aes('sine-in-out') +
+  ggtitle("Observations by month v2")
+
+# animate(p)
+```

@@ -1,0 +1,23 @@
+"0","```r
+# Spreads dataset to wide format
+comp.wide <- spread(long.comp, key = \"species\", value = \"cover\")
+comp.attr <- select(comp.wide, one_of(c(\"year\", waps.specs$specname[waps.specs$type == \"class\"])))
+```"
+"1","Adding missing grouping variables: `plot`, `block`, `subblock`, `water`, `fertilization`
+"
+"0","```r
+comp.wide <- ungroup(comp.wide) %>%  select(one_of(waps.specs$specname[waps.specs$type != \"class\"]))
+comp.wide <- apply(comp.wide, 2, as.numeric)
+comp.wide[is.na(comp.wide)] <- 0
+# Merges with treatment labels
+comp.attr <- left_join(comp.attr, trtlabels)
+```"
+"1","Joining, by = c(\"plot\", \"block\")
+"
+"0","```r
+comp.attr$sp.trt <- gsub(\"[[:space:]]\", \"\", comp.attr$sp.trt)
+# Binding attribute columns with abundance matrix and writing new CSV
+wide.comp <- cbind(data.frame(comp.attr), data.frame(comp.wide))
+# Writing full wide csv
+write.csv(x = wide.comp, file = \"../data/comdata_wideformat.csv\")
+```"

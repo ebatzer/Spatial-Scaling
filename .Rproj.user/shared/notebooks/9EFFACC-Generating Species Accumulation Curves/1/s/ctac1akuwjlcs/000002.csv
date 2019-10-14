@@ -1,0 +1,10 @@
+"0","```r
+inner_join(grandmean, meaneffect) %>%
+  filter(q == 0) %>%
+  ggplot(aes(x = as.numeric(samp))) +
+  geom_line(aes(y = meaneffect / meandiv)) + 
+  facet_wrap(~year)
+
+```"
+"1","Joining, by = c(\"samp\", \"q\", \"year\")
+"

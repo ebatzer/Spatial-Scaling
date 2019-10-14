@@ -1,0 +1,4 @@
+"0","```r
+comp.wide[comp.wide == 235] = 23.50
+hist(rowSums(comp.wide))
+```"

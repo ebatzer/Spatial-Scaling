@@ -1,0 +1,21 @@
+{
+    "collab_server" : "",
+    "contents" : "matrix(c(0,0,0,0), nrow = 2) %*% c(1,1)\n",
+    "created" : 1512078659828.000,
+    "dirty" : true,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "3973107414",
+    "id" : "8D08276",
+    "lastKnownWriteTime" : 7953768456432936306,
+    "last_content_update" : 1512078681447,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 6,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

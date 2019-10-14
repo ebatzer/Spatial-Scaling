@@ -1,0 +1,9 @@
+"0","bs %>% group_by(Startdatemonth, Startdateyear, StateProvince) %>% 
+  summarise(count = n()) %>%
+  ggplot(aes(x = factor(Startdatemonth), fill = factor(Startdatemonth), y = count)) +
+  geom_histogram(stat = ""identity"", position = position_dodge()) +
+  facet_wrap(~StateProvince) +
+  ggtitle(""Total Sightings by Month"") +
+  xlab(""Month"")
+"
+"2","Ignoring unknown parameters: binwidth, bins, pad"

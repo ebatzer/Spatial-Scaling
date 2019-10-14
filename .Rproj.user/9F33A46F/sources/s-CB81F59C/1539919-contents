@@ -1,0 +1,95 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Light Meter Readings:
+
+```{r}
+library(tidyverse); library(ggplot2)
+
+# Reading in light meter data
+lr <- read.csv("LightReadings_All.csv", header = TRUE, stringsAsFactors = FALSE)
+descriptions <- read.csv("./2017/SiteDescriptions.csv")
+
+# Removing plots that are "bad" or "bare"
+lr <- lr %>% filter(Notes == "")
+
+# Merging data
+lr <- lr %>% right_join(descriptions)
+
+# Setting factor variables
+lr$year <- as.factor(lr$year)
+lr$block <- as.factor(lr$block)
+lr$plot <- as.factor(lr$plot)
+lr$fertilized <- as.factor(lr$fertilized)
+
+# Data summary
+summary(lr)
+```
+
+### Visualizing data:
+
+```{r}
+lr %>% ggplot(aes(x = block,
+                  y = Interception,
+                  fill = fertilized)) +
+  geom_boxplot() +
+  facet_grid(site ~ year)
+```
+
+# Generating statistical model
+
+* Response = light interception (%)
+* Random effects = Block:Plot (repeated measures)
+* Fixed effects = Year(factor), Year : Treatment
+
+```{r}
+library(lme4)
+lr_formod <- lr %>% filter(! ((site == "HREC") 
+                              # & (block == 1)
+                              )) 
+
+# Likely do not need to 
+mod <- lmer(Interception ~ year + year:fertilized + (1|block) + (1|block:plot), data = lr_formod)
+summary(mod)
+
+mod_nonest <- lmer(Interception ~ year + year:fertilized + (1|block), data = lr_formod)
+anova(mod, mod_nonest)
+
+plot(mod_nonest)
+qqnorm(scale(resid(mod_nonest)))
+abline(a = 0, b = 1)
+```
+
+# Plotting mean effects:
+
+```{r}
+library(emmeans)
+library(ggthemes)
+
+est.means <- emmeans(mod_nonest, specs = c("year", "fertilized"), lmer.df = "satterthwaite")
+cld(est.means, alpha = .001)
+
+pd = .3
+
+data.frame(est.means) %>% ggplot(aes(x = factor(year),
+                         y = emmean,
+                         fill = fertilized)) +
+  geom_point(shape = 21, size = 10, position = position_dodge(width = pd)) +
+  geom_errorbar(aes(ymin=lower.CL, ymax=upper.CL), width=.1, position = position_dodge(width = pd)) +
+  ylim(.6, 1) +
+  labs(title = "Change in Percent Light Interception",
+       subtitle = "Estimated means +/- 95% confidence interval") +
+  xlab("Year") +
+  ylab("Proportion of Light Intercepted") +
+  annotate("text", x = 1, y = .95, label = "*", size = 10) +
+  annotate("text", x = 2, y = .95, label = "*", size = 10) +
+  scale_fill_discrete("Treatment:", 
+                      breaks=c("0", "1"), 
+                      labels=c("Control", "N Fertilization")) +
+  theme_fivethirtyeight()
+
+ggsave("Figures/LightInterceptionPlot.jpeg", height = 5, width = 7)
+
+```

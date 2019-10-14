@@ -1,0 +1,188 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+fig_width: 5
+fig_height: 3 
+---
+```{r}
+knitr::opts_chunk$set(fig.width=6, fig.height=4) 
+```
+
+# What story do I want to tell with this data?
+
+## Conceptual background:
+
+### Broad rationale:
+
+* Nutrient enrichment is recognized as a major threat to biodiversity worldwide
+
+* Question of scale - constant problem in ecology.
+
+* Much of our understanding of how nitrogen enrichment impacts plant diversity comes from small-scale experiments - responses observed in a 1m2 plot or smaller
+
+* Extrapolating from the results of these small-scale experiments to broader patterns comes with some caveats
+
+    * Many ecological phenomena exhibit scale-dependence, particularly with respect to spatial scale of sampling
+    
+        * Examples: Spatial scaling and invasion effects (Powell et al. 2013)
+        * Lan et al. (2015) J. Ecology
+        * Chase et al. (2018) BioRxiv
+        
+* Because many experiments evaluate effects at a single spatial scale, you're likely to miss nuanced interpretation that can produce meaningful insights into how different environmental stressors impact plant diversity.
+
+### Nutrient enrichment
+
+* Nutrient enrichment (particularly nitrogen) is a highly pervasive environmental stressor
+  
+    * Worldwide patterns of N deposition, nutrient runoff, etc.
+    
+* Fertilization increases plant growth and intensity of light competition that favors large, fast growing species
+
+* Notion of niche collapse - addition of a limiting nutrient reduces relevant variation in its contribution to species fitness
+
+    * Therefore, addition of multiple limiting nutrients can have greater effects than saturation of a single resource
+  
+    * When resources are spatially heterogeneous, nutrient addition can act as a homogenizing force
+    
+### Introduce California annual grasslands
+
+* High plant diversity, despite invasive history
+
+* High spatial heterogeneity of vegetation and soil resources
+
+### Introduction to accumulation curves
+
+* To quantify spatial scale-dependence, classic approaches utilze species-accumulation curves which relate observed diversity to sampling effort.
+
+* We can use these curves to determine how effects vary with scale, and identify whether effects increase or decrease with spatial scale, as well as inflection points where interpetation flips.
+
+* However, when species accumulation curves are composed of individual sampling subunits, we can also vary the way in which we accumulate diversity (spatially or randomly) - detecting the influence of spatial processes on the shape of this relationship, such as spatial aggregation (clustering of individuals)
+
+### Accumulation curve figure:
+
+* Show two communities - one with a greater number of species at the gamma scale and lower species richness per sample unit + aggregation, one with a smaller number of species at the gamma scale and lower species richness per sample unit + no aggregation.
+
+* Demonstrate the steps to my analysis (borrowing elements of the analysis framework of McGlinn et al. (2018)):
+
+    * Alpha, gamma, and beta diversity - the endpoints of this relationship
+    
+    * Spatial accumulation order + its resulting curve
+    
+    * Random accumulation order + its resulting curve
+    
+    * Mean difference in these curves (aggregation effect in each community)
+    
+    * Relative contribution of aggregation effect to the shape of this scaling relationship (net change)
+    
+![Alpha Change.](../Figures/plot_examples.jpeg){width=1000px}
+![Alpha Change.](../Figures/curve_examples.jpeg){width=500px}
+![Alpha Change.](../Figures/response_examples.jpeg){width=500px}
+
+
+* Can also reference difference in weighting effective numbers of species metrics
+    
+### Why distinguishing between these mechanisms matters
+
+### Questions
+
+ * Do nutrient enrichment effects vary with spatial scale?
+
+ * Does use of abundance weighted metrics change our interpretation of effects?
+ 
+ * How does spatial aggregation contribute to the observed differences between curves?
+
+## Methods
+
+### Study design
+
+* Reserves + plot layout
+
+### Response variables measured
+
+* Plant biomass change
+
+* Light availability change
+
+* Community composition
+
+## Results
+    
+### Confirming the resource limitation of communities
+
+* Biomass change over time
+
+* Light availability change over time
+
+![Light Meter Readings.](../Figures/LightInterceptionPlot.jpeg){width=500px}  
+
+
+### Community composition change
+
+* Raw species area curves:  
+
+2017 Species Richness Accumulation  
+
+![](../Figures/GeneralCurvesQ0_2017.jpeg){width=500px}  
+
+
+2017 Effective Number of Species Accumulation  
+
+![](../Figures/GeneralCurvesQ2_2017.jpeg){width=500px}  
+
+
+2018 Species Richness Accumulation  
+
+![](../Figures/GeneralCurvesQ0_2018.jpeg){width=500px}  
+
+
+2018 Effective Number of Species Accumulation  
+
+![](../Figures/GeneralCurvesQ2_2018.jpeg){width=500px} 
+
+
+### Two-scale analysis (endpoints of the curve)
+
+* Difference in alpha/beta/gamma diversity over time (bar plot)  
+
+![Alpha Change.](../Figures/AlphaDivChange.jpeg){width=500px}  
+
+![Beta Change.](../Figures/BetaDivChange.jpeg){width=500px}  
+
+![Gamma Change.](../Figures/GammaDivChange.jpeg){width=500px}  
+
+
+### Construction of random species area curves (Show together for 2018?)
+
+* Net effect over scales (nonlinear patterns for Q = 0, more linear patterns for Q = 2)
+
+* Change in net effect (greater effect at intermediate scales than otherwise)
+
+
+### Quantifying this aggregation effect
+
+* Average aggregation effect in communities
+
+![Species richness aggregation effect](../Presentation Figures/aggeffectq0.jpeg){width=500px}  
+
+![ENSpie aggregation effect](../Presentation Figures/aggeffectq2.jpeg){width=500px}  
+
+
+## Conclusions and interpretation
+
+
+## Things to think about (potential questions)
+
+* Individual density? Much of this spatial scaling work delves into the role of number of individuals in diversity patterns (particularly important in invasive work?), but also may be important in situations where increased nutrient availability increases individual size and reduces packing efficiency.
+
+* Knowing that blocks are the same + sampling design? Be good to mention briefly in methods or be prepared to have more detail in afterword that notes how we chose the sampling grain and extent - variation in quadrat area and spatial lag.
+
+
+
+
+
+
+
+
+

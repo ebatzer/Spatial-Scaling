@@ -1,0 +1,70 @@
+"0","```r
+wide.comp[order(rowSums(comp.wide), decreasing = TRUE)[1:10],c(1:6, 26:ncol(wide.comp))]
+```"
+"1","     plot block subblock       water fertilization year aegilops ag.big ag.small amsinckia avena big.leaf.dandelion
+1231  124     2        1         wet          none 2008     12.5      0        0         0  12.5                  0
+1221  123     2        1         wet     high fert 2008      0.0      0        0         0  12.5                  0
+3398  340     4        1     control          none 2015      2.5      0        0         0  25.0                  0
+869    87     1        3     control          none 2016     35.0      0        0         0   2.5                  0
+488    49     1        2 control-2nd     high fert 2015      0.0      0        0         0  12.5                  0
+2578  258     3        2     control          none 2015      0.0      0        0         0  12.5                  0
+7158  716     7        3 control-2nd          none 2015      0.0      0        0         0  12.5                  0
+228    23     1        1     latewet          none 2015      0.0      0        0         0   0.0                  0
+4238  424     5        1         wet     high fert 2015     12.5      0        0         0  12.5                  0
+8028  803     8        2 control-2nd     high fert 2015      0.0      0        0         0  55.0                  0
+     bindweed bro.carinatus bro.hordeaceous bro.madritensis bro.diandrus bunchgrass cap.bur centaurea con.arv
+1231        0          12.5            12.5               0          0.0          0       0         0       0
+1221        0          12.5            12.5               0          0.0          0       0         0       0
+3398        0           0.0             0.0               0          0.0          0       0        25       0
+869         0           2.5            25.0               0          0.0          0       0         0       0
+488         0           0.0             0.0               0          0.0          0       0         0       0
+2578        0           0.0             0.0               0          2.5          0       0         0       0
+7158        0          12.5             2.5               0          0.0          0       0         0       0
+228         0           0.0            12.5               0          0.0          0       0         0       0
+4238        0           0.0            12.5               0          0.0          0       0         0       0
+8028        0           2.5            12.5               0          0.0          0       0         0       0
+     conyza elymus epilobium.brach erodium.moschatum galium geranium gumplant helianthus hordeum.sp italian.thistle
+1231    0.0    2.5               0               0.0      0        0        0          0          0               0
+1221    0.0   12.5               0               0.0      0        0        0          0          0               0
+3398    0.0    0.0               0              45.0      0        0        0          0          0               0
+869     0.0    0.0               0               0.0      0        0        0          0          0               0
+488     0.0    0.0               0              45.0      0       75        0          0          0               0
+2578   12.5    0.0               0              35.0      0        0        0          0          0               0
+7158    0.0    0.0               0               0.0      0       35        0          0          0               0
+228     0.0    0.0               0              25.0      0        0        0          0          0               0
+4238    0.0    0.0               0              12.5      0        0        0          0          0               0
+8028    0.0    0.0               0               0.0      0        0        0          0          0               0
+     kickxia.elatine lactuca.serriola leymus lolium lotus lupinus melilotus milk.thistle mustard nassella oats
+1231               0                0    2.5   12.5     0    25.0         0            0       0      0.0    0
+1221               0                0   12.5   25.0     0     2.5         0            0       0      0.0    0
+3398               0               45    0.0    0.0    35     2.5         0            0      55      0.0    0
+869                0                0   65.0    0.0     0     0.0         0            0       0     25.0    0
+488                0               85    0.0    0.0     0     0.0         0            0      65      0.0    0
+2578               0               75    0.0    0.0     0    12.5         0            0      65      0.0    0
+7158               0                0    0.0    0.0     0     0.0         0            0      25      2.5    0
+228                0               75    0.0    0.0     0    25.0         0            0      85      0.0    0
+4238               0               45    0.0    0.0    65     0.0         0            0       0      0.0    0
+8028               0                0    0.0    0.0     0     2.5         0            0      35     75.0    0
+     orchard.grass phalaris.sp poa redmaid senecio taeniatherum tarweed thistle tragopogon.porrifolius trifolium
+1231             0           0   0     0.0     0.0        235.0       0       0                      0      12.5
+1221             0           0   0     0.0     0.0        235.0       0       0                      0       2.5
+3398             0           0   0    12.5    45.0         35.0       0       0                      0       0.0
+869              0           0  35     0.0     0.0         25.0       0       0                      0      95.0
+488              0           0   0     0.0    12.5          0.0       0       0                      0       0.0
+2578             0           0   0     0.0    45.0          2.5       0       0                      0       0.0
+7158             0           0   0    12.5    12.5         12.5       0       0                      0      85.0
+228              0           0   0    25.0    12.5          0.0       0       0                      0       0.0
+4238             0           0   0     0.0    45.0         25.0       0       0                      0       0.0
+8028             0           0   0     0.0     2.5         25.0       0       0                      0       0.0
+     unk.thistle veronica vicia vulpia
+1231           0        0   0.0   12.5
+1221           0        0   0.0    2.5
+3398           0        0   0.0    0.0
+869            0        0   0.0    0.0
+488            0        0  12.5    0.0
+2578           0        0  45.0    0.0
+7158           0        0  95.0    0.0
+228            0        0  45.0    0.0
+4238           0        0  75.0    0.0
+8028           0        0  95.0    0.0
+"

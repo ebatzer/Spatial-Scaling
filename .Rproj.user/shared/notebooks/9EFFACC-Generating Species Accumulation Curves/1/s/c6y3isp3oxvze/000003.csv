@@ -1,0 +1,7 @@
+"0","```r
+q1_spatial_summary %>%
+  filter(site != \"HREC\") %>%
+  ggplot(aes(x = as.numeric(samp))) +
+  geom_line(aes(y = -diff_frac, linetype = paste(site, block), color = year))+
+  ggtitle(\"difference at q = 1\")
+```"

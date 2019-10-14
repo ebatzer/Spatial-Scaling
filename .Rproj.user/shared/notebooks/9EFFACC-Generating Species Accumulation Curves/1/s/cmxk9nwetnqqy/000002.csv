@@ -1,0 +1,23 @@
+"0","```r
+spatial_perm %>% group_by(fert, samp, q, year) %>%
+  summarise(meandiv = mean(div),
+            semean = sd(div) / sqrt(11)) %>%
+  filter(q == 2) %>%
+  ggplot(aes(x = as.numeric(samp),
+             color = as.factor(fert))) +
+  geom_line(aes(y = meandiv), size = 2) +
+  geom_line(aes(y = meandiv - semean), linetype = 2 ) +
+  geom_line(aes(y = meandiv + semean), linetype = 2) +
+  facet_wrap(~year)
+
+
+spatial_perm %>% group_by(fert, samp, q, year) %>%
+  summarise(meandiv = mean(div)) %>%
+  group_by(samp, q, year) %>%
+  summarise(propdiff = (meandiv[fert == 0] - meandiv[fert == 1])) %>%
+  filter(q == 2) %>%
+  ggplot(aes(x = as.numeric(samp),
+             y = propdiff,
+             color = year)) +
+  geom_line()
+```"

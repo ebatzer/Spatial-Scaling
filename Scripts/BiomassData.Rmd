@@ -1,0 +1,92 @@
+---
+title: "BiomassMeasures"
+output: html_document
+---
+
+# Biomass Data Analysis
+
+```{r}
+bm <- read.csv("./Biomass/2018_updated.csv", header = TRUE, stringsAsFactors = FALSE)
+head(bm)
+
+descriptions <- read.csv("./2017/SiteDescriptions.csv")
+head(descriptions)
+
+bm <- bm %>% right_join(descriptions)
+head(bm)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+bm %>% group_by(site, block, year, fertilized) %>%
+  summarise(meanmass = mean(PerM2))
+  
+bm %>% ggplot(aes(x = as.factor(block), y = PerM2, fill = factor(fertilized))) +
+  geom_boxplot() +
+  facet_wrap(site ~ year)
+```
+
+```{r}
+library(lme4)
+
+bm$year <- bm$year - 2017
+
+# Setting factor variables
+bm$year <- as.factor(bm$year)
+bm$block <- as.factor(bm$block)
+bm$plot <- as.factor(bm$plot)
+bm$fertilized <- as.factor(bm$fertilized)
+
+bm_formod <- bm %>% filter(! ((site == "HREC") 
+                              # & (block == 1)
+                              )) 
+
+# Likely do not need to 
+mod <- lmer(PerM2 ~ year + year:fertilized + (1|block) + (1|block:plot), data = bm_formod)
+summary(mod)
+
+mod_nonest <- lmer(PerM2 ~ year + year:fertilized + (1|block), data = bm_formod)
+anova(mod, mod_nonest)
+
+plot(mod)
+qqnorm(scale(resid(mod)))
+abline(a = 0, b = 1)
+```
+
+```{r}
+# Plotting mean effects:
+
+library(emmeans)
+library(ggthemes)
+
+est.means <- emmeans(mod, specs = c("year", "fertilized"), lmer.df = "satterthwaite")
+cld(est.means, alpha = .05)
+
+pd = .3
+
+data.frame(est.means) %>% ggplot(aes(x = factor(year),
+                         y = emmean,
+                         fill = fertilized)) +
+  geom_point(shape = 21, size = 10, position = position_dodge(width = pd)) +
+  geom_errorbar(aes(ymin=lower.CL, ymax=upper.CL), width=.1, position = position_dodge(width = pd)) +
+  #ylim(.6, 1) +
+  labs(title = "Biomass Production",
+       subtitle = "Estimated means +/- 95% confidence interval")+
+  #annotate("text", x = 1, y = .95, label = "*", size = 10) +
+  #annotate("text", x = 2, y = .95, label = "*", size = 10) +
+  scale_fill_discrete("Treatment:", 
+                      breaks=c("0", "1"), 
+                      labels=c("Control", "N Fertilization")) +
+  theme_fivethirtyeight() +
+  theme(text = element_text(size = 15, face = "bold", color = "black")) +
+  theme(panel.background = element_rect(fill = "white"),
+        plot.background = element_rect(fill = "white")) + 
+  theme(panel.grid.major = element_line(colour = "grey85"),
+        legend.background = element_rect(fill = "white")) +
+  xlab("Year") +
+  ylab("Biomass (g / meter squared)")
+
+ggsave("Figures/BiomassPlot.jpeg", height = 5, width = 9)
+```
+

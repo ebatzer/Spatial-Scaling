@@ -1,0 +1,8 @@
+"0","library(dplyr)"
+"0","colnames(bs) = gsub(pattern = ""[ ,\\/, (, )]"", """", colnames(bs))"
+"0","sumtable = bs %>% group_by(Startdatemonth, Startdateyear) %>% summarise(count = n())"
+"0","bs %>% group_by(Startdatemonth, Startdateyear, StateProvince) %>% summarise(count = n()) %>%"
+"0","  filter(Startdateyear > 1985) %>%"
+"0","  ggplot(aes(x = Startdateyear, y = count, fill = Startdateyear)) +"
+"0","  geom_histogram(stat = ""identity"")"
+"2","Ignoring unknown parameters: binwidth, bins, pad"

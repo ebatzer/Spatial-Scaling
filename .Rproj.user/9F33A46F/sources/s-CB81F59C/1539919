@@ -1,0 +1,24 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1531766111974.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "1539919",
+    "lastKnownWriteTime" : 1531767333,
+    "last_content_update" : 1531767333075,
+    "path" : "C:/Users/ebatzer/Box Sync/Eviner lab shared/Evan/Research Projects/Spatial-Scaling/LightMeterReadings.Rmd",
+    "project_path" : "LightMeterReadings.Rmd",
+    "properties" : {
+        "chunk_output_type" : "inline",
+        "cursorPosition" : "82,34",
+        "scrollLine" : "0",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 4,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}
