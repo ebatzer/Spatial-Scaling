@@ -1,0 +1,83 @@
+---
+title: "Two-Scale Analysis"
+output: html_notebook
+---
+
+Comparison of alpha, beta, and gamma diversity between plots forms what is commonly 
+referred to as a "two-scale" analysis in scaling research, as metrics are constructed 
+using the finest spatial resolution (subplots) relative to the largest resolution (plots).  
+
+Of the 3 possible mechanisms that could be responsible for generating our response 
+curves, the two-scale analysis focuses on effects purely related to the species 
+abundance distribution -- both richness and relative abundance of communities.
+Changes in community spatial patterns, which require information on sample XY
+coordinates, can't be assessed in this approach, as we can't address anything
+below our minimum spatial grain or at the largest possible scale.  
+
+I conduct analysis here using two types of diversity measures that differentially
+account for the abundance of different species. Using linearized diversity metrics
+(Jost 2006, 2009), weighting species abundances to the power of 0 (q=0) or to the
+power of 2 (q=2) focus on richness and "evenness", respectively. 
+
+Comparing effects using these metrics can reveal the mechanism for observed diversity
+change -- a common response seems to be a loss of diversity in both metrics at small
+scales, but differential effects at larger scales that suggest fertilization rarely
+causes local extirpation, but reduces the probability of capturing rare species 
+in limited sampling.
+
+## Reading in Datasets
+
+```{r}
+
+```
+
+## Loading Functions
+
+```{r}
+source("diversity_metrics.R")
+source("gamma_permutation.R")
+source("test_diversity_metrics.R")
+```
+
+
+## Visualizing Species Abundance Distributions
+
+Rank-abundance curves for all species at each site, per year (saved for diagnostic
+purposes, not shown)
+
+```{r}
+
+```
+
+---
+
+## Two-Scale Analysis, q = 0
+
+### Alpha diversity
+
+### Beta diversity
+
+### Gamma diversity
+
+---
+
+## Two-Scale Analysis, q = 2
+
+### Alpha diversity
+
+### Beta diversity
+
+### Gamma diversity
+
+---
+
+## Visualization
+
+This can be a bit tricky to visualize, so I think the best approach might be to 
+focus on either displaying the total lost diversity at each metric, or divide these
+values by their mean to produce an estimated effect size (proportion) of biodiversity loss.
+
+### Raw difference in diversity
+
+
+### Proportional difference in diversity

@@ -1,0 +1,64 @@
+---
+title: "Accumulation Curve Fitting"
+output: html_notebook
+---
+
+The next step in this analysis is to examine how these effects differ as a function
+of the number of samples included -- are effects strongest locally and linearly
+decline? Or do they show a nonlinear pattern? How important are spatial distributions?  
+
+Here, I generate accumulation curves for each plot to capture these effects. The 
+first approach, the "empirical" accumulation curve captures the effects of both
+plot community composition and spatial distribution. The second, the "random" accumulation
+curve, randomizes plot positions to remove these spatial effects, and can serve 
+as a null model.
+
+## Loading in datasets
+
+```{r}
+
+# Community data
+
+# Community matrix attributes
+
+```
+
+## Loading Functions
+
+```{r}
+source("diversity_metrics.R")
+source("gamma_permutation.R")
+source("test_diversity_metrics.R")
+```
+
+---
+
+## Accumulation at q = 0
+
+### Generating empirical accumulation curves
+
+
+### Generating a list of randomized accumulation curves
+
+
+### Visualization
+
+Observed diversity difference as a function of scale
+
+* 3 lines, one per year, of average difference between curves? Proportional?
+
+Spatial effect contribution as a function of scale
+
+* Observed vs. null model. Associated significance?
+
+Decomposition of effects as a function of 
+
+
+---
+
+## Accumulation at q = 2
+
+### Generating empirical accumulation curves
+
+
+### Generating a list of randomized accumulation curves

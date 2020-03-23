@@ -1,0 +1,86 @@
+---
+title: "Biomass and Light Analysis"
+output: html_notebook
+---
+
+# Reading in datasets
+
+```{r}
+
+```
+
+---
+
+# Light data
+
+Statistics of interest:
+
+#### Total light interception (1 - light availability)  
+Average of two samples divided by the proportion available at surface
+
+#### Heterogeneity of light interception 
+Coefficient of variation of light availability
+
+## Model fitting:
+
+Mixed model predicting light as a function of the years of treatment, with random effects accounting for the non-random effects of block and repeated observation of plot.
+
+$$Light = factor(Year_{trt}) + (1 | Block) + (1 | Block : Plot)$$
+
+```{r}
+
+# Diagnostics
+
+```
+
+
+### Comparison with other model types:
+
+```{r}
+
+```
+
+### Visualization of model fit
+
+Predicted means across all sites
+
+---
+
+# Biomass data
+
+Statistics of interest:
+
+#### Total community biomass
+Biomass (g) / .1m^2
+
+#### Heterogeneity of biomass
+Coefficient of variation of biomass availability
+
+## Model fitting:
+
+Mixed model predicting biomass as a function of the years of treatment, with random effects accounting for the non-random effects of block. Sampling locations were randomized, so a random effect of plot was not included.
+
+$$Biomass = factor(Year_{trt}) + (1 | Block)$$
+
+```{r}
+
+# Diagnostics
+
+```
+
+
+### Comparison with other model types:
+
+```{r}
+
+```
+
+### Visualization of model fit
+
+Predicted means across all sites
+
+
+
+
+
+

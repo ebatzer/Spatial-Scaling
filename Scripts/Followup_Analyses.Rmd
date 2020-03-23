@@ -1,0 +1,9 @@
+---
+title: "Follow-up Analyses"
+output: html_notebook
+---
+
+### Change in diversity as a funciton of functional group
+
+### Representation in different plots as a function of abundance
+
