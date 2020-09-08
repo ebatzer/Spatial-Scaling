@@ -28,15 +28,72 @@ in limited sampling.
 ## Reading in Datasets
 
 ```{r}
+library(tidyverse);library(data.table); library(grid); library(gridExtra)
+library(permute)
+
+# Community data
+com_data <- fread("../Data/finalmat_draft.csv")
+
+# Species list
+speclist <- read.csv("../Data/SpeciesList.csv")
+colnames(speclist)[1] = "Label"
+
+# Treatments
+sitelabels <- read.csv(file = "../Data/FinalDatasets/Site_Descriptions.csv")
+
+sitelabels <- sitelabels %>%
+              rename(blockno = "block",
+                     plotno = "plot")
+
+# Filtering data
+
+com_data <- com_data[,-1] %>% select(-"index")
+
+idcols <- c("site", "blockno", "plotno", "subplotno", "subplotx", "subploty", "year")
+
+com_data <- com_data %>% filter(site %in% c("SFREC", "MCLA"))
+
+com_att <- com_data %>% dplyr::select(all_of(idcols))
+
+com_mat <- com_data %>% dplyr::select(-one_of(idcols)) %>%
+  dplyr::select(all_of(speclist$Label[speclist$Include == 1]))
+
+dim(com_att)
+dim(com_mat)
+
+# Converting values to cover classes
+
+daub_correction <- function(x){
+  if(x == 1){ x <- ((0+1)/2)}
+  if(x == 2){ x <- ((1+5)/2)}
+  if(x == 3){ x <- ((5+25)/2)}
+  if(x == 4){ x <- ((25+50)/2)}
+  if(x == 5){ x <- ((50+75)/2)}
+  if(x == 6){ x <- ((75+95)/2)}
+  if(x == 7){ x <- ((95+100)/2)}
+  if(x == 0){ x <- 0}
+  return(x)
+}
+
+com_mat <- as.data.table(apply(com_mat,
+                 MARGIN = c(1,2), 
+                 FUN = daub_correction))
+
+which(is.na(com_mat))
+# write.csv(x = colnames(com_mat),
+#           "../Data/final_columns.csv")
 
 ```
+
+---
+
+# Analysis
 
 ## Loading Functions
 
 ```{r}
 source("diversity_metrics.R")
 source("gamma_permutation.R")
-source("test_diversity_metrics.R")
 ```
 
 
@@ -45,39 +102,602 @@ source("test_diversity_metrics.R")
 Rank-abundance curves for all species at each site, per year (saved for diagnostic
 purposes, not shown)
 
-```{r}
-
-```
-
 ---
+
+```{r}
+# Creating split set of matrices
+splitmat <- split(com_mat, f = paste(com_att$site, com_att$blockno, com_att$plotno, com_att$year))
+splitatt <- split(com_att, f = paste(com_att$site, com_att$blockno, com_att$plotno, com_att$year))
+
+# Saving for future analyses
+if(!file_test("-f", "../Data/biodiv_dat.RData")){
+  save(com_mat, com_att, splitmat, splitatt, file = "../Data/biodiv_dat.RData")
+}
+```
 
 ## Two-Scale Analysis, q = 0
 
-### Alpha diversity
+```{r}
+plot_div <- cbind(com_att %>% arrange(site, blockno, plotno, year), 
+                  a_q0 = unlist(lapply(splitmat, calculate_alpha_diversity, q = 0)),
+                  sn = unlist(lapply(splitmat, function(x) apply(x, specnumber, MARGIN = 1))), # Sanity check
+                  a_q2 = unlist(lapply(splitmat, calculate_alpha_diversity, q = 2)),
+                  b_q0 = unlist(lapply(splitmat, calculate_beta_diversity, q = 0)),
+                  b_q2 = unlist(lapply(splitmat, calculate_beta_diversity, q = 2))) 
 
-### Beta diversity
+block_div <- cbind(distinct(com_att %>% select(site, blockno, plotno, year) %>% arrange(site, blockno, plotno, year)),
+                   g_q0 = unlist(lapply(splitmat, calculate_gamma_diversity, q = 0)),
+                   g_q2 = unlist(lapply(splitmat, calculate_gamma_diversity, q = 2)))
+```
 
-### Gamma diversity
+# Summarizing LRRs
 
----
-
-## Two-Scale Analysis, q = 2
-
-### Alpha diversity
-
-### Beta diversity
-
-### Gamma diversity
-
----
-
-## Visualization
-
-This can be a bit tricky to visualize, so I think the best approach might be to 
-focus on either displaying the total lost diversity at each metric, or divide these
-values by their mean to produce an estimated effect size (proportion) of biodiversity loss.
-
-### Raw difference in diversity
+```{r}
+LRR_summary <- plot_div %>% 
+  group_by(year, blockno, plotno, site) %>%
+  summarise(mean_alpha_q0 = mean(a_q0),
+            mean_alpha_q2 = mean(a_q2),
+            mean_beta_q0 = mean(b_q0),
+            mean_beta_q2 = mean(b_q2)) %>%
+  left_join(sitelabels %>% select(site, blockno, plotno, fertilized)) %>%
+  ungroup() %>%
+  select(-plotno) %>%
+  pivot_wider(names_from = fertilized,
+              values_from = -c('year', 'blockno', 'site')) %>%
+  group_by(year, blockno, site) %>%
+  transmute(LRR_alpha_q0 = mean_alpha_q0_1 / mean_alpha_q0_0,
+         LRR_alpha_q2 = mean_alpha_q2_1 / mean_alpha_q2_0,
+         LRR_beta_q0 = mean_beta_q0_1 / mean_beta_q0_0,
+         LRR_beta_q2 = mean_beta_q2_1 / mean_beta_q2_0)
 
 
-### Proportional difference in diversity
+block_div_summary <- left_join(block_div, sitelabels) %>%
+  group_by(year, blockno, plotno, site) %>%
+  summarise(mean_gamma_q0 = mean(g_q0),
+            mean_gamma_q2 = mean(g_q2)) %>%
+  left_join(sitelabels %>% select(site, blockno, plotno, fertilized)) %>%
+  ungroup() %>%
+  select(-plotno) %>%
+  pivot_wider(names_from = fertilized,
+              values_from = -c('year', 'blockno', 'site')) %>%
+  group_by(year, blockno, site) %>%
+  transmute(LRR_gamma_q0 = mean_gamma_q0_1 / mean_gamma_q0_0,
+         LRR_gamma_q2 = mean_gamma_q2_1 / mean_gamma_q2_0)
+
+LRR_summary <- left_join(LRR_summary, block_div_summary)
+
+summary(lm(log(LRR_gamma_q2) ~ 0 + as.factor(year), data = LRR_summary))
+```
+
+# Bootstrapping
+
+```{r, warnings = FALSE}
+n_boots = 9999
+output <- list()
+
+for(bootno in 1:n_boots){
+  
+  samplevec <- c(sample(1:64, size = 64, replace = TRUE))
+  while(length(samplevec) < nrow(com_att)){
+    samplevec <- c(sample(1:64, size = 64, replace = TRUE), samplevec + 64)
+  }
+  
+  com_mat_boot <- com_mat[samplevec,]
+  
+  splitmat_boot <- split(com_mat_boot, f = paste(com_att$site, com_att$blockno, com_att$plotno, com_att$year))
+  
+  block_div <- cbind(distinct(com_att %>% select(site, blockno, plotno, year) %>% 
+                                arrange(site, blockno, plotno, year)),
+                     g_q0 = unlist(lapply(splitmat_boot, calculate_gamma_diversity, q = 0)),
+                     g_q2 = unlist(lapply(splitmat_boot, calculate_gamma_diversity, q = 2)))
+  
+  plot_div_boot <- plot_div %>% group_by(site, blockno, plotno, year) %>% slice(sample(n(), 64, replace = TRUE))
+  
+  LRR_summary_boot <- plot_div_boot %>% 
+    group_by(site, year, blockno, plotno) %>%
+    summarise(mean_alpha_q0 = mean(a_q0),
+              mean_alpha_q2 = mean(a_q2),
+              mean_beta_q0 = mean(b_q0),
+              mean_beta_q2 = mean(b_q2)) %>%
+    ungroup() %>%
+    left_join(sitelabels %>% select(site, blockno, plotno, fertilized), c("blockno", "plotno", "site")) %>%
+    select(-plotno) %>%
+    pivot_wider(names_from = fertilized,
+                values_from = -c('year', 'blockno', 'site')) %>%
+    group_by(year, blockno, site) %>%
+    transmute(perm = bootno, 
+              LRR_alpha_q0 = mean_alpha_q0_1 / mean_alpha_q0_0,
+              LRR_alpha_q2 = mean_alpha_q2_1 / mean_alpha_q2_0,
+              LRR_beta_q0 = mean_beta_q0_1 / mean_beta_q0_0,
+              LRR_beta_q2 = mean_beta_q2_1 / mean_beta_q2_0)
+  
+  
+  block_div_summary_boot <- left_join(block_div, sitelabels) %>%
+    group_by(site, year, blockno, plotno) %>%
+    summarise(mean_gamma_q0 = mean(g_q0),
+              mean_gamma_q2 = mean(g_q2)) %>%
+    ungroup() %>%
+    left_join(sitelabels %>% select(site, blockno, plotno, fertilized), c("blockno", "plotno", "site")) %>%
+    select(-plotno) %>%
+    pivot_wider(names_from = fertilized,
+                values_from = -c('year', 'blockno', 'site')) %>%
+    group_by(year, blockno, site) %>%
+    transmute(LRR_gamma_q0 = mean_gamma_q0_1 / mean_gamma_q0_0,
+              LRR_gamma_q2 = mean_gamma_q2_1 / mean_gamma_q2_0)
+  
+  LRR_summary_boot <- left_join(LRR_summary_boot, block_div_summary_boot, 
+                                by = c("year", "blockno", "site"))
+
+  output[[bootno]] <- LRR_summary_boot
+}
+
+bootoutput <- bind_rows(output)
+
+bootsummary <- bootoutput %>% group_by(perm, year) %>%
+  summarise_if(is.numeric, mean) %>%
+  group_by(year) %>%
+  summarise_if(is.numeric, quantile, probs = c(.025 / 3, .5, 1 - .025 / 3)) %>%
+  mutate(quantile = c(.025, .5, .975))
+```
+
+
+
+# Visualization
+
+```{r}
+LRR_summary_long <- LRR_summary %>%
+  pivot_longer(cols = -c('year', 'blockno', 'site'),
+               names_to = 'Scale',
+               values_to = 'LRR')
+
+LRR_overall <- LRR_summary_long %>%
+  group_by(Scale, year) %>%
+  summarise(LRR = mean(LRR))
+
+LRR_boots <- bootsummary %>%
+  select(-perm, - blockno) %>%
+  pivot_longer(cols = -c('year', 'quantile'),
+               names_to = 'Scale',
+               values_to = 'LRR') %>%
+  pivot_wider(values_from = "LRR",
+             names_from = "quantile") %>%
+  rename('q025' = '0.025',
+         'q5' = '0.5',
+         'q975' = '0.975')
+
+q0plot <- ggplot(aes(x = as.factor(year),
+             y = log(LRR)),
+       data = LRR_summary_long[grep('q0', LRR_summary_long$Scale),]) +
+  geom_hline(aes(yintercept = 0)) + 
+  geom_point(aes(shape = as.factor(site),
+                 color = as.factor(site)),
+             alpha = .5, size = 2) +
+  geom_point(data =  LRR_overall[grep('q0', LRR_overall$Scale),],
+             size = 3) +
+  geom_errorbar(data = LRR_boots[grep('q0', LRR_boots$Scale),],
+                aes(ymin = log(q025),
+                    y = log(q5),
+                    ymax = log(q975)),
+                width = .2,
+                size = .5)+
+  facet_wrap(~Scale) +
+  theme_bw() +
+  ylim(-.6, .6) + 
+  xlab('Year') +
+  ylab('Log Response Ratio') +
+  scale_shape_manual(name = 'Site',
+                     values = c(15,17)) +
+    scale_color_manual(name = 'Site',
+                       values = c("#009E73", "orange3"))+
+  ggtitle('a) Q = 0')
+
+q2plot <- ggplot(aes(x = as.factor(year),
+             y = log(LRR)),
+       data = LRR_summary_long[grep('q2', LRR_summary_long$Scale),]) +
+  geom_hline(aes(yintercept = 0)) + 
+  geom_point(aes(shape = as.factor(site),
+                 color = as.factor(site)),
+             alpha = .5, size = 2) +
+  geom_point(data =  LRR_overall[grep('q2', LRR_overall$Scale),],
+             size = 3) +
+  geom_errorbar(data = LRR_boots[grep('q2', LRR_boots$Scale),],
+                aes(ymin = log(q025),
+                    y = log(q5),
+                    ymax = log(q975)),
+                width = .2,
+                size = .5)+
+  facet_wrap(~Scale) +
+  theme_bw() +
+  ylim(-.6, .6) + 
+  xlab('Year') +
+  ylab('Log Response Ratio') +
+  scale_shape_manual(name = 'Site',
+                     values = c(15,17)) +
+  scale_color_manual(name = 'Site',
+                       values = c("#009E73", "orange3"))+
+  ggtitle('b) Q = 2')
+
+
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+mylegend<-g_legend(q0plot)
+
+p3 <- arrangeGrob(arrangeGrob(q0plot + theme(legend.position="none"),
+                         q2plot + theme(legend.position="none"),
+                         nrow=2),
+             mylegend, nrow=1,widths =c(6, 1))
+
+ggsave("../Figures/Fig4_twoscale.pdf",
+       p3,
+       height = 6,
+       width = 7)
+```
+
+# Changes in occupancy at a local scale
+
+```{r}
+presabs <- bind_rows(lapply(splitmat, function(x) colSums(x > 0)))
+abunds <- bind_rows(lapply(splitmat, function(x) colSums(x) / 64))
+
+comlabels <- com_att %>% select(site, blockno, plotno, year) %>% unique() %>% arrange(site, blockno, plotno, year)
+
+pres_long <- bind_cols(comlabels, presabs) %>% pivot_longer(-colnames(comlabels),
+                                               names_to = "taxon",
+                                               values_to = "pres")
+
+abund_long <- bind_cols(comlabels, abunds) %>% pivot_longer(-colnames(comlabels),
+                                               names_to = "taxon",
+                                               values_to = "abund")
+
+inner_join(pres_long, abund_long) %>%
+  left_join(sitelabels %>% select(site, blockno, plotno, fertilized)) %>%
+  filter(year == 2019 & pres != 0) %>%
+  ggplot(aes(x = log(abund),
+             y= pres,
+             color = as.factor(fertilized))) +
+  geom_point() +
+  stat_smooth()
+```
+
+```{r}
+data_formod <- inner_join(pres_long, abund_long) %>%
+  left_join(sitelabels %>% select(site, blockno, plotno, fertilized)) %>%
+  filter(pres != 0)
+  
+summary(glmer(cbind(pres, 64 - pres) ~ log(abund) + fertilized + (1 | blockno:site),
+      family = "binomial",
+      data = data_formod %>% filter(year == 2017)))
+
+summary(glmer(cbind(pres, 64 - pres) ~ log(abund) + fertilized + (1 | blockno:site),
+      family = "binomial",
+      data = data_formod %>% filter(year == 2018)))
+
+
+mod_2019 <- glmer(cbind(pres, 64 - pres) ~ log(abund) + fertilized + (1 | blockno:site),
+      family = "binomial",
+      data = data_formod %>% filter(year == 2019))
+summary(mod_2019)
+
+summary(glmer(cbind(pres, 64 - pres) ~ scale(log(abund)) + as.factor(I(fertilized * year)) + as.factor(year) + (1 | blockno:site) + (1|taxon),
+      family = "binomial",
+      data = data_formod))
+```
+
+
+```{r}
+to_predict <- expand.grid(abund = exp(log(seq(.01, 100, by = .01))),
+                       fertilized = c(0,1))
+plot_2019 <- cbind(to_predict, 
+      pred_occ = predict(mod_2019, newdata = to_predict, re.form = NA, type = "response")) %>%
+  ggplot(aes(x = log(abund),
+             y = pred_occ,
+             color = as.factor(fertilized))) +
+  geom_line(size = 1.5) +
+  theme_bw() +
+  geom_point(aes(y = pres / 64),
+             data = data_formod %>% filter(year == 2019),
+             alpha = .2) +
+  scale_color_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  xlab('Log(Mean Cover)') +
+  ylab('Proportion of Samples Present') +
+  ggtitle('2019')
+
+
+
+mod_2017 <- glmer(cbind(pres, 64 - pres) ~ log(abund) + fertilized + (1 | blockno:site),
+      family = "binomial",
+      data = data_formod %>% filter(year == 2017))
+
+to_predict <- expand.grid(abund = exp(log(seq(.01, 100, by = .01))),
+                       fertilized = c(0,1))
+plot_2017 <- cbind(to_predict, 
+      pred_occ = predict(mod_2017, newdata = to_predict, re.form = NA, type = "response")) %>%
+  ggplot(aes(x = log(abund),
+             y = pred_occ,
+             color = as.factor(fertilized))) +
+  geom_line(size = 1.5) +
+  theme_bw() +
+  geom_point(aes(y = pres / 64),
+             data = data_formod %>% filter(year == 2017),
+             alpha = .2) +
+  scale_color_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  xlab('Log(Mean Cover)') +
+  ylab('Proportion of Samples Present') +
+  ggtitle('2017')
+
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+mylegend<-g_legend(plot_2019)
+
+p3 <- arrangeGrob(arrangeGrob(plot_2017 + theme(legend.position="none"),
+                         plot_2019 + theme(legend.position="none"),
+                         nrow=1),
+             mylegend, top = 'Sample Occupancy vs. Abundance', nrow=1,widths =c(6, 1))
+
+# ggsave("../Figures/Fig6_aggeffects_indiv.pdf",
+#        p3,
+#        height = 4,
+#        width = 8)
+
+```
+
+# Changes in species relative abundances
+
+```{r}
+att_block <- distinct(com_att %>% select(site, blockno, plotno, year) %>% arrange(site, blockno, plotno, year)) %>%
+  left_join(sitelabels %>% select(site, blockno, plotno, fertilized)) %>%
+  mutate(fert_year = (year - 2016) * fertilized)
+
+com_block <- bind_rows(lapply(splitmat, colSums))
+
+mcladat <- com_block[att_block$site == "MCLA",]
+mcladat <- mcladat[,colSums(mcladat) > 0]
+
+sfrecdat <- com_block[att_block$site == "SFREC",]
+sfrecdat <- sfrecdat[,colSums(sfrecdat) > 0]
+
+library(vegan)
+
+adonis2(mcladat ~ as.factor(blockno) + as.factor(year) + as.factor(fert_year) * as.factor(blockno), 
+        data = att_block[att_block$site == "MCLA",])
+
+reducedmod <- adonis(mcladat ~ as.factor(blockno) + as.factor(year), 
+        data = att_block[att_block$site == "MCLA",])
+
+nmdsdat <- metaMDS(mcladat^ (1/4), autotransform = FALSE, trymax = 99)
+p1 <- cbind(nmdsdat$points, att_block[att_block$site == "MCLA",]) %>%
+  ggplot(aes(x = MDS1,
+             y = MDS2,
+             color = as.factor(year),
+             shape = as.factor(fertilized),
+             group = paste(year, blockno))) +
+  theme_bw()+
+  geom_point(size = 3) +
+  geom_line() +
+  ggrepel::geom_text_repel(aes(label = blockno), show.legend = FALSE) +
+  scale_color_discrete(name = "Year") +
+  scale_shape_discrete(name = "Treatment", labels = c("Control", "+N")) +
+  xlab("NMDS Axis 1") +
+  ylab("NMDS Axis 2") +
+  ggtitle("Compositional NMDS") +
+  geom_text(aes(x = Inf,
+                y = -Inf,
+                color = NULL,
+                shape = NULL,
+                group = NULL),
+            label = paste("Stress:", round(nmdsdat$stress,2)),
+            vjust = -1,
+            hjust = 1.5, 
+            show.legend = FALSE)
+
+A <- as.matrix((-.5) * vegdist(mcladat) ^ 2, method = "bray")
+G <- A - rowMeans(A) + mean(A)
+G <- apply(A, MARGIN = 2, FUN = function(x){x - mean(x)})
+X <- reducedmod$model.matrix
+H <- (X %*% solve(t(X) %*% X) %*% t(X))
+sum(diag(as.matrix(G)))
+
+G_r <- (diag(nrow(G)) - H) %*% G %*% (diag(nrow(G)) - H)
+sum(diag(G_r))
+
+D_r <- matrix(0, nrow = nrow(G_r), ncol = ncol(G_r))
+
+for(i in c(1:nrow(G_r))){
+  
+  for(j in c(1:ncol(G_r))){
+    D_r[i,j] = sqrt(abs(G_r[i,i] - 2 * G_r[i,j] + G_r[j,j]))
+    
+  }
+}
+
+nmdsdat <- metaMDS(D_r, autotransform = FALSE,trymax = 99)
+p2 <- cbind(nmdsdat$points, att_block[att_block$site == "MCLA",]) %>%
+  ggplot(aes(x = MDS1,
+             y = MDS2,
+             color = as.factor(year),
+             shape = as.factor(fertilized),
+             group = paste(year, blockno))) +
+  theme_bw()+
+  geom_point(size = 3) +
+  # geom_line() +
+  ggrepel::geom_text_repel(aes(label = blockno), show.legend = FALSE) +
+  scale_color_discrete(name = "Year") +
+  scale_shape_discrete(name = "Treatment", labels = c("Control", "+N")) +
+  xlab("NMDS Axis 1") +
+  ylab("NMDS Axis 2") +
+  ggtitle("Residualized NMDS (Year and Block Effects Removed)") +
+  geom_text(aes(x = Inf,
+                y = -Inf,
+                color = NULL,
+                shape = NULL,
+                group = NULL),
+            label = paste("Stress:", round(nmdsdat$stress,2)),
+            vjust = -1,
+            hjust = 1.5,
+            show.legend = FALSE)
+
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+mylegend<-g_legend(p2)
+
+p3 <- arrangeGrob(arrangeGrob(p1 + theme(legend.position="none"),
+                         p2 + theme(legend.position="none"),
+                         nrow=1),
+             mylegend,
+             top = "McLaughlin UCNRS", nrow=1,widths =c(6, 1))
+ggsave("../Figures/appendix_MCLA_NMDS.pdf",
+       p3,
+       height = 5,
+       width = 10)
+
+```
+
+```{r}
+taxons <- read.csv('../Data/ColumnIDs_Final.csv')
+sfrecdat <- com_block[att_block$site == "SFREC",]
+sfrecdat <- sfrecdat[,colSums(sfrecdat) > 0]
+
+adonis2(sfrecdat ~ as.factor(blockno) + as.factor(year) + as.factor(fert_year) * as.factor(blockno), 
+        data = att_block[att_block$site == "SFREC",])
+
+reducedmod <- adonis(sfrecdat ~ as.factor(blockno) + as.factor(year), 
+        data = att_block[att_block$site == "SFREC",])
+
+nmdsdat <- metaMDS(sfrecdat^ (1/4), autotransform = FALSE)
+p1 <- cbind(nmdsdat$points, att_block[att_block$site == "SFREC",]) %>%
+  ggplot(aes(x = MDS1,
+             y = MDS2,
+             color = as.factor(year),
+             shape = as.factor(fertilized),
+             group = paste(year, blockno))) +
+  theme_bw()+
+  geom_point(size = 3) +
+  geom_line() +
+  ggrepel::geom_text_repel(aes(label = blockno)) +
+  scale_color_discrete(name = "Year") +
+  scale_shape_discrete(name = "Treatment", labels = c("Control", "+N")) +
+  xlab("NMDS Axis 1") +
+  ylab("NMDS Axis 2") +
+  ggtitle("Compositional NMDS") +
+  geom_text(aes(x = Inf,
+                y = -Inf,
+                color = NULL,
+                shape = NULL,
+                group = NULL),
+            label = paste("Stress:", round(nmdsdat$stress,2)),
+            vjust = -1,
+            hjust = 1.5,
+            show.legend = FALSE)
+
+A <- as.matrix((-.5) * vegdist(sfrecdat) ^ 2, method = "bray")
+G <- A - rowMeans(A) + mean(A)
+G <- apply(A, MARGIN = 2, FUN = function(x){x - mean(x)})
+X <- reducedmod$model.matrix
+H <- (X %*% solve(t(X) %*% X) %*% t(X))
+sum(diag(as.matrix(G)))
+sum(diag(G_r))
+
+G_r <- (diag(nrow(G)) - H) %*% G %*% (diag(nrow(G)) - H)
+
+D_r <- matrix(0, nrow = nrow(G_r), ncol = ncol(G_r))
+
+for(i in c(1:nrow(G_r))){
+  
+  for(j in c(1:ncol(G_r))){
+    D_r[i,j] = sqrt(abs(G_r[i,i] - 2 * G_r[i,j] + G_r[j,j]))
+    
+  }
+}
+
+nmdsdat <- metaMDS(D_r, autotransform = FALSE,)
+p2 <- cbind(nmdsdat$points, att_block[att_block$site == "SFREC",]) %>%
+  ggplot(aes(x = MDS1,
+             y = MDS2,
+             color = as.factor(year),
+             shape = as.factor(fertilized),
+             group = paste(year, blockno))) +
+  theme_bw()+
+  geom_point(size = 3) +
+  # geom_line() +
+  ggrepel::geom_text_repel(aes(label = blockno)) +
+  scale_color_discrete(name = "Year") +
+  scale_shape_discrete(name = "Treatment", labels = c("Control", "+N")) +
+  xlab("NMDS Axis 1") +
+  ylab("NMDS Axis 2")+
+  ggtitle("Residualized NMDS (Year and Block Effects Removed)") +
+  geom_text(aes(x = Inf,
+                y = -Inf,
+                color = NULL,
+                shape = NULL,
+                group = NULL),
+            label = paste("Stress:", round(nmdsdat$stress,2)),
+            vjust = -1,
+            hjust = 1.5,
+            show.legend = FALSE)
+
+mylegend<-g_legend(p2)
+
+p3 <- arrangeGrob(arrangeGrob(p1 + theme(legend.position="none"),
+                         p2 + theme(legend.position="none"),
+                         nrow=1),
+             mylegend,
+             top = "Sierra Foothill REC", nrow=1,widths =c(6, 1))
+ggsave("../Figures/appendix_SFREC_NMDS.pdf",
+       p3,
+       height = 5,
+       width = 10)
+
+```
+
+```{r}
+cover_organized <- cbind(att_block[att_block$site == "MCLA", c("site", "fertilized", "blockno", "year")], mcladat) %>%
+  arrange(fertilized, blockno, year)
+ 
+net_eff <- (cover_organized[13:24,-c('site', 'fertilized', 'blockno', 'year')] / 
+    rowSums(cover_organized[13:24,-c('site', 'fertilized', 'blockno', 'year')])) - 
+  (cover_organized[1:12,-c('site', 'fertilized', 'blockno', 'year')] /
+     rowSums(cover_organized[1:12,-c('site', 'fertilized', 'blockno', 'year')]))
+
+id_rows <- distinct(cover_organized[,c("site","blockno", "year")])
+mean_effects <- cbind(id_rows, net_eff) %>% group_by(site, year) %>% summarise_all(mean) %>% select(-blockno)
+
+control_cov <- (cover_organized[1:12,-c('site', 'fertilized', 'blockno', 'year')] / 
+    rowSums(cover_organized[1:12,-c('site', 'fertilized', 'blockno', 'year')]))
+
+mean_control <- cbind(id_rows, control_cov) %>% group_by(site, year) %>% summarise_all(mean) %>% select(-blockno)
+
+cover_summary <- mean_control %>% pivot_longer(cols = -c('site', 'year')) %>%
+  pivot_wider(names_from = year,
+              values_from = value) %>%
+  rename('Cover_2017' = '2017',
+         'Cover_2018' = '2018',
+         'Cover_2019' = '2019')
+
+effect_summary <- mean_effects %>% pivot_longer(cols = -c('site', 'year')) %>%
+  pivot_wider(names_from = year,
+              values_from = value) %>%
+  rename('diff_2017' = '2017',
+         'diff_2018' = '2018',
+         'diff_2019' = '2019')
+
+write.csv(x = left_join(cover_summary, effect_summary) %>%
+  left_join(taxons %>% select(Label, Genus, Species, Group, Provenance), by = c('name' = 'Label')),
+          file = "../Data/coverchange_summary.csv")
+
+```
+

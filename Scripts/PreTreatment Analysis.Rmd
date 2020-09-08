@@ -1,0 +1,208 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(viridis); library(tidyverse); library(gridExtra)
+olddata <- read.csv("../Data/2016/alldatacombined2016.csv")
+oldids <- read.csv("../Data/2016/alldataidentification2016.csv")
+coords <- read.csv("../Data/2016/Plot Coordinates.csv")
+coords <- coords %>% filter(subplotres == 0.50)
+```
+
+# Cover
+
+```{r}
+dat_merged <- cbind(oldids, olddata %>% select(-index) %>% mutate_all(as.numeric)) 
+dat_merged$LagRam[dat_merged$site_code == "SFREC"] = dat_merged$LagRam[dat_merged$site_code == "SFREC"] +  dat_merged$MadGra[dat_merged$site_code == "SFREC"]
+dat_merged$MadGra[dat_merged$site_code == "SFREC"] = 0
+
+RA_byblock <- dat_merged %>% filter(site_code != "HREC" & subplotres == 0.5) %>%
+  pivot_longer(-colnames(oldids)) %>%
+  replace_na(list(value = 0)) %>%
+  group_by(block, site_code, name) %>%
+  summarise(mean_cover = mean(value)) %>%
+  arrange(site_code, desc(mean_cover)) 
+
+RA_bysite <- dat_merged %>% filter(site_code != "HREC" & subplotres == 0.5) %>%
+  pivot_longer(-colnames(oldids)) %>%
+  replace_na(list(value = 0)) %>%
+  group_by(site_code, name) %>%
+  summarise(mean_cover = mean(value)) %>%
+  filter(! name %in%  c('Bare', 'Gopher')) %>%
+  arrange(site_code, desc(mean_cover)) %>%
+  ungroup() %>%
+  group_by(site_code) %>%
+  mutate(rank = c(1:n())) %>%
+  select(-mean_cover)
+
+MCL_data <- left_join(RA_byblock, RA_bysite, by = c("site_code", "name")) %>%
+  filter(rank <= 15 & site_code == "MCL") 
+
+p1 <- MCL_data %>%
+  ggplot(aes(x = as.factor(rank),
+             y = mean_cover,
+             fill = desc(rank))) +
+    theme_bw() +
+  geom_boxplot() +
+  scale_x_discrete(labels = RA_bysite$name[RA_bysite$site_code == "MCL" & RA_bysite$rank <= 20]) + 
+  theme(axis.text.x = element_text(angle=45, vjust = .5)) +
+  xlab("Abundance Rank") +
+  ylab("Mean Cover") +
+  scale_fill_viridis(option = "A", begin = .3) +
+  ylim(0, 50) +
+  guides(fill = FALSE) +
+  ggtitle("Pretreatment Species Abundance - MCLA")
+
+
+SFREC_data <- left_join(RA_byblock, RA_bysite, by = c("site_code", "name")) %>%
+  filter(rank <= 15 & site_code == "SFREC") 
+
+p2 <- SFREC_data %>%
+  ggplot(aes(x = as.factor(rank),
+             y = mean_cover,
+             fill = desc(rank))) +
+    theme_bw() +
+  geom_boxplot() +
+  scale_x_discrete(labels = RA_bysite$name[RA_bysite$site_code == "SFREC" & RA_bysite$rank <= 20]) + 
+  theme(axis.text.x = element_text(angle=45, vjust = .5)) +
+  xlab("Abundance Rank") +
+  ylab("Mean Cover") +
+  scale_fill_viridis(option = "A", begin = .3) +
+  ylim(0, 50)+
+  guides(fill = FALSE)  +
+  ggtitle("Pretreatment Species Abundance - SFREC")
+
+p3 <- arrangeGrob(p1, p2, nrow=2)
+
+# ggsave("../Figures/supp_communityabund.pdf",
+#        p3,
+#        height = 6,
+#        width = 7)
+```
+
+# Pre-treatment differences in richness and spatial distribution
+
+
+
+Mantel correlograms
+
+```{r}
+mcl_comm <- dat_merged %>% 
+  filter(site_code == "MCL" & subplotres == 0.5) %>%
+  select(-colnames(oldids), Bare)
+
+sfrec_comm <- dat_merged %>% 
+  filter(site_code == "SFREC" & subplotres == 0.5) %>%
+  select(-colnames(oldids), Bare)
+
+library(vegan)
+
+manteltest_mcla <- mantel.correlog(D.eco = vegdist(mcl_comm[1:32,], method = 'bray'),
+                D.geo = dist(coords[1:32, c("mid_x", "mid_y")]))
+
+manteltest_sfrec <- mantel.correlog(D.eco = vegdist(sfrec_comm[1:32,], method = 'bray'),
+                D.geo = dist(coords[1:32, c("mid_x", "mid_y")]))
+
+p1 <- data.frame(manteltest_mcla$mantel.res) %>%
+  filter(!is.na(Pr.corrected.)) %>%
+  ggplot(aes(x = class.index,
+             y = Mantel.cor, 
+             fill = Pr.corrected. < 0.05)) +
+  theme_bw() +
+  geom_line(aes(fill = NULL)) + 
+  geom_point(pch = 21, size = 3) +
+  xlim(0,5) +
+  xlab("Distance Class (m)") +
+  ylab("Mantel Correlation") +
+  ggtitle("MCLA Mantel Correlogram") +
+  guides(fill = FALSE)
+
+p2 <- data.frame(manteltest_sfrec$mantel.res) %>%
+  filter(!is.na(Pr.corrected.)) %>%
+  ggplot(aes(x = class.index,
+             y = Mantel.cor, 
+             fill = Pr.corrected. < 0.05)) +
+  theme_bw() +
+  geom_line(aes(fill = NULL)) + 
+  geom_point(pch = 21, size = 3) +
+  xlim(0,5) +
+  xlab("Distance Class (m)") +
+  ylab("Mantel Correlation") +
+  ggtitle("SFREC Mantel Correlogram") +
+  scale_fill_discrete(name = "Corrected P < 0.05")
+
+p3 <- arrangeGrob(p1, p2, nrow=2, widths = c(4,6))
+
+
+ggsave("../Figures/supp_mantelcorr.pdf",
+       p3,
+       height = 6,
+       width = 8)
+```
+
+
+Diversity differences
+
+```{r}
+alphaplot <- oldids %>% 
+  filter(site_code != "HREC" & subplotres == 0.5) %>% 
+  mutate(richness = c(vegan::specnumber(mcl_comm), vegan::specnumber(sfrec_comm))) %>%
+  mutate(site_code = if_else(site_code == "MCL", "MCLA", "SFREC")) %>%
+  group_by(site_code, block) %>%
+  summarise(meanrich = mean(richness),
+            serich = sd(richness) / sqrt(n())) %>%
+  ggplot(aes(x = block %% 2,
+             y = meanrich,
+             fill = block <= 2)) +
+  geom_errorbar(aes(ymin = meanrich - serich,
+                    ymax = meanrich + serich),
+                width = .1) +
+  geom_line(aes(group = block <= 2)) +
+  geom_point(size = 3, pch = 21) +
+  facet_wrap(~site_code) +
+  xlab("Plot") +
+  ylab("Mean Alpha Richness") +
+  ylim(10,20) +
+  scale_x_continuous(labels = c("1", "2"),
+                     breaks = c(0,1)) +
+  scale_fill_manual(values = c("#009E73", "orange3")) +
+  guides(fill = FALSE) +
+  ggtitle("Alpha Richness +/- SE") +
+  theme_bw()
+
+gammaplot <- distinct(oldids %>% filter(site_code != "HREC") %>% select(site_code, block)) %>%
+  mutate(site_code = if_else(site_code == "MCL", "MCLA", "SFREC")) %>%
+  mutate( gamma = c(specnumber(colSums(mcl_comm[1:32,])),
+  specnumber(colSums(mcl_comm[33:64,])),
+  specnumber(colSums(mcl_comm[65:96,])),
+  specnumber(colSums(mcl_comm[97:128,])),
+  specnumber(colSums(sfrec_comm[1:32,])),
+  specnumber(colSums(sfrec_comm[33:64,])),
+  specnumber(colSums(sfrec_comm[65:96,])),
+  specnumber(colSums(sfrec_comm[97:128,])))) %>%
+  ggplot(aes(x = block %% 2,
+             y = gamma,
+             fill = block <= 2)) +
+  geom_line(aes(group = block <= 2)) +
+  geom_point(size = 3, pch = 21) +
+  facet_wrap(~site_code) +
+  xlab("Plot") +
+  ylab("Gamma Richness") +
+  ylim(20,40) +
+  scale_x_continuous(labels = c("", "1", "2", ""),
+                     breaks = c(-.5,0,1,1.5)) +
+  scale_fill_manual(values = c("#009E73", "orange3")) +
+  guides(fill = FALSE) +
+  ggtitle("Gamma Richness") +
+  theme_bw() 
+
+p3 <- arrangeGrob(alphaplot, gammaplot, nrow=1)
+
+ggsave("../Figures/richdiff.pdf",
+       p3,
+       height = 4,
+       width = 7)
+```
+

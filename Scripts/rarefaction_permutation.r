@@ -28,14 +28,32 @@ rarefaction_curves <- function(species_abundance, coords, strata) {
   return(curves)
 }
 
+rarefaction_curves_varq <- function(species_abundance, coords, strata, q = q) {
+  curves <- data.frame()
+  for (strata_level in levels(strata)) {
+    curves <- rbind(curves, rarefaction_varq(species_abundance[strata == strata_level,], "spat", 
+                                              coords = coords, latlong = FALSE, q = q))
+  }
+  names(curves) <- 1:ncol(curves)
+  curves <- cbind(strata = levels(strata), curves)
+  return(curves)
+}
+
 # Wrapper for mobr::rarefaction that handles permutation process
 # This seems like it could be refactored a bit (currently exists so I can outsource apply)
 # The logic is kind of awkward but it works, I think
-permuted_rarefaction <- function(permute_info, species_abundance, coords, strata) {
+permuted_rarefaction <- function(permute_info, species_abundance, coords, strata, q) {
   permute_order <- permute_info[-1]
   permute_iter <- permute_info[1]
   permuted_species_abundance <- species_abundance[permute_order, ]
   curves <- rarefaction_curves(species_abundance, coords, strata)
+  
+  if(q == 0){
+    curves <- rarefaction_curves(species_abundance, coords, strata)
+  }else{
+    curves <- rarefaction_curves_varq(species_abundance, coords, strata, q = q)
+  }
+  
   curves <- cbind(permute_iter = permute_iter, curves)
   return(curves)
   # This can instead return a set of statistics?
@@ -43,7 +61,7 @@ permuted_rarefaction <- function(permute_info, species_abundance, coords, strata
 
 # Permutation testing function
 # Strata corresponds to one plot here (todo: rename?)
-permute_spatial <- function(species_abundance, treatment, coords, strata = NULL, nperm = 999, test = 'two-sided') {
+permute_spatial <- function(species_abundance, treatment, coords, strata = NULL, nperm = 999, test = 'two-sided', q = 0) {
   
   # Preliminary setup steps
   # If there is no strata specified, create a strata column of 1
@@ -58,12 +76,16 @@ permute_spatial <- function(species_abundance, treatment, coords, strata = NULL,
   # TODO: Enforce one strata at each treatment level?
   
   # Calculate rarefaction curves, unpermuted
-  curve0 <- rarefaction_curves(species_abundance, coords, strata)
+  if(q == 0){
+    curve0 <- rarefaction_curves(species_abundance, coords, strata)
+  }else{
+    curve0 <- rarefaction_curves_varq(species_abundance, coords, strata, q = q)
+  }
   
   # Calculate rarefaction curves in permutatuions
   permset <- permutation_set_spatial(nrow(species_abundance), nperm, strata)
   permset <- cbind(1:nrow(permset), permset)
-  curves <- apply(permset, 1, permuted_rarefaction, species_abundance = species_abundance, coords = coords, strata = strata)
+  curves <- apply(permset, 1, permuted_rarefaction, species_abundance = species_abundance, coords = coords, strata = strata, q = q)
   curves <- do.call(rbind, curves)
   # This is probably inefficient, since it requires storing each item of the list produced by apply
   # but, well, it works?

@@ -16,19 +16,16 @@ as a null model.
 ## Loading in datasets
 
 ```{r}
-
-# Community data
-
-# Community matrix attributes
-
+load("../Data/biodiv_dat.RData")
 ```
 
 ## Loading Functions
 
 ```{r}
+library(tidyverse); library(gridExtra); library(lme4)
 source("diversity_metrics.R")
 source("gamma_permutation.R")
-source("test_diversity_metrics.R")
+source("rarefaction_permutation.R")
 ```
 
 ---
@@ -36,29 +33,669 @@ source("test_diversity_metrics.R")
 ## Accumulation at q = 0
 
 ### Generating empirical accumulation curves
+```{r}
+if(!file_test("-f", "../Data/curve_sims_q0.rds")){
+  output <- list()
+  
+  for(i in 1:length(splitmat)){
+    spatperm <- permute_spatial(as.data.frame(splitmat[[i]]),
+                                coords = splitatt[[i]] %>% dplyr::select(subplotx, subploty),
+                                treatment = rep(1, nrow(splitmat[[i]])),
+                                nperm = 999)
+    id <- list(id = unique(splitatt[[i]][,c(1:3, 7)]))
+    
+    output <- append(output, 
+                     list(append(spatperm, id)))
+    
+    print(paste("Finished run", i, "of", length(splitmat)))
+  }
+  
+ saveRDS(output, file = "../Data/curve_sims_q0.rds")
+}
+```
+
+```{r, warning=FALSE}
+perm_func <- function(x, plotxy){
+  mobr::rarefaction(x[shuffle(x),], coords = plotxy, method = "spat", latlong = FALSE)
+}
 
 
-### Generating a list of randomized accumulation curves
+if(!file_test("-f", "../Data/curve_sims_q0_v2.rds")){
+  output <- list()
+  
+  for(i in 1:length(splitmat)){
+    
+    spatperm <- mobr::rarefaction(splitmat[[i]], coords = splitatt[[i]][,c('subplotx', 'subploty')], method = "spat", latlong = FALSE)
+
+    permoutput <- t(replicate(n = 999, perm_func(splitmat[[i]], splitatt[[i]][,c('subplotx', 'subploty')])))
+
+    spatrand <- cbind(perm = c(1:nrow(permoutput)),
+                           permoutput)
+    
+    id <- list(id = unique(splitatt[[i]][,c(1:3, 7)]))
+    
+    output <- append(output, 
+                     list(append(
+                       list(data.frame(t(spatperm)), data.frame(spatrand)),
+                       id)
+                       )
+                     )
+    if(i %% 12 == 0){
+    print(paste("Finished run", i, "of", length(splitmat)))
+    }
+  }
+  
+ saveRDS(output, file = "../Data/curve_sims_q0_v2.rds")
+}
+
+```
 
 
-### Visualization
+## Gathering data
 
-Observed diversity difference as a function of scale
+```{r}
+# Species richness
+curves_q0 <- readRDS("../Data/curve_sims_q0_v2.rds")
+spat_curves_q0 <- lapply(curves_q0, '[[', 1) %>% lapply(., function(x) data.frame(x))
+curveids_q0 <- lapply(curves_q0, '[[', 3)
+rand_curves_q0 <- lapply(curves_q0, '[[', 2)
 
-* 3 lines, one per year, of average difference between curves? Proportional?
+add_labels <- function(x, y){
+  curves_with_ids <- list()
+  for(i in 1:length(x)){
+    curves_with_ids[[i]] <- cbind(x[[i]], y[[i]])
+  }
+  return(curves_with_ids)
+}
 
-Spatial effect contribution as a function of scale
+# Species richness
+q0_spat <- add_labels(curveids_q0, spat_curves_q0) %>% bind_rows(.)
+q0_rand <- add_labels(curveids_q0, rand_curves_q0) %>% bind_rows(.)
 
-* Observed vs. null model. Associated significance?
+```
 
-Decomposition of effects as a function of 
+## Plotting empirical curves
+
+```{r}
+sitelabels <- read.csv(file = "../Data/FinalDatasets/Site_Descriptions.csv")
+
+q0_spat <- inner_join(sitelabels, q0_spat, by = c("plot" = "plotno", "site" = "site", "block" = "blockno"))
+
+SAR_block <- q0_spat %>%
+  select(-sitename, -dateestablished) %>%
+  pivot_longer(-c("site", "year", "fertilized", "block", "plot"),
+               names_to = "samp_effort",
+               values_to = "diversity") %>%
+  mutate(samp_effort = gsub("X", "", samp_effort)) %>%
+  filter(samp_effort %in% c(1,2,4,8,16,32,64))
+
+SAR_mean <- q0_spat %>% group_by(year, fertilized) %>% summarise_if(is.numeric, mean) %>%
+  pivot_longer(-c("year", "fertilized", "block", "plot"),
+               names_to = "samp_effort",
+               values_to = "diversity") %>%
+  mutate(samp_effort = gsub("X", "", samp_effort)) %>%
+  filter(samp_effort %in% c(1,2,4,8,16,32,64))
+
+rawplot <- SAR_block %>%
+  ggplot(aes(x = as.numeric(samp_effort),
+             y = diversity,
+             color = as.factor(fertilized),
+             fill = as.factor(fertilized),
+             group = paste(site, block, fertilized))) +
+  geom_line(data = SAR_mean, aes(group = NULL), size = 2) + 
+  geom_line(alpha = .4, size = .5) + 
+  # geom_point(shape = 21, alpha = .4) +
+  geom_point(shape = 21, data = SAR_mean, aes(group = NULL), color = 'black', size = 2) +
+  facet_wrap(~year) +
+  theme_bw() +
+  scale_fill_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  scale_color_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  ylab("Species Richness") +
+  xlab("Number of Samples") +
+  ggtitle("a) SAC - Untransformed")
+  
+
+logplot <- SAR_block %>%
+  ggplot(aes(x = log(as.numeric(samp_effort)),
+             y = log(diversity),
+             color = as.factor(fertilized),
+             fill = as.factor(fertilized),
+             group = paste(site, block, fertilized))) +
+  geom_line(data = SAR_mean, aes(group = NULL), size = 2) + 
+  geom_line(alpha = .4, size = .5) + 
+  # geom_point(shape = 21, alpha = .4) +
+  geom_point(shape = 21, data = SAR_mean, aes(group = NULL), color = 'black', size = 2) +
+  facet_wrap(~year) +
+  theme_bw() +
+  scale_fill_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  scale_color_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  ylab("log(Species Richness)") +
+  xlab("log(Number of Samples)") +
+  ggtitle("b) SAC - Log Scale")
+
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+mylegend<-g_legend(rawplot)
+
+p3 <- arrangeGrob(arrangeGrob(rawplot + theme(legend.position="none"),
+                         logplot + theme(legend.position="none"),
+                         nrow=2),
+             mylegend, nrow=1,widths =c(6, 1))
 
 
----
+summary(lmer(log(diversity) ~ log(as.numeric(samp_effort)) * fertilized + (1 | site:block),
+     data = SAR_block %>% filter(year == 2017)))
+summary(lmer(log(diversity) ~ log(as.numeric(samp_effort)) * fertilized + (1 | site:block),
+     data = SAR_block %>% filter(year == 2018)))
+summary(lmer(log(diversity) ~ log(as.numeric(samp_effort)) * fertilized + (1 | site:block),
+     data = SAR_block %>% filter(year == 2019)))
 
-## Accumulation at q = 2
+ggsave("../Figures/Fig3_sars.pdf",
+       p3,
+       height = 4.5,
+       width = 7)
+```
 
-### Generating empirical accumulation curves
+```{r}
+# Difference between fertilization / control accumulation curves on the log-log scale
+net_diff_long <- sitelabels %>% 
+  inner_join(q0_rand, by = c("plot" = "plotno", "site" = "site", "block" = "blockno")) %>%
+  select(-sitename, -dateestablished) %>%
+  pivot_longer(cols = - c('site', 'block', 'plot', 'fertilized', 'year', 'perm'),
+               names_to = 'samples') %>%
+  mutate(samples = gsub("X", "", samples)) %>%
+  select(-plot) %>%
+  mutate(fertilized = if_else(fertilized == 0, 'unfert', 'fert')) %>%
+  pivot_wider(values_from = 'value',
+              names_from = 'fertilized') %>%
+  mutate(diff = log(fert) - log(unfert))
+
+net_diff_byblock <- net_diff_long %>% 
+  group_by(perm, year, samples, block, site) %>%
+  summarise(mean_diff = mean(as.numeric(diff))) %>%
+  group_by(year, samples, block, site) %>%
+  summarise(diff_med = quantile(as.numeric(mean_diff), p = 0.5),
+            diff_lo = quantile(as.numeric(mean_diff), p = 0.025),
+            diff_hi = quantile(as.numeric(mean_diff), p = 1 - .025)) %>%
+  arrange(year, as.numeric(samples))
+ 
+net_diff_summary <- net_diff_long %>% 
+  group_by(perm, year, samples) %>%
+  summarise(diff = mean(diff)) %>%
+  group_by(year, samples) %>%
+  summarise(diff_med = quantile(diff, p = 0.5),
+            diff_lo = quantile(diff, p = 0.00078125),
+            diff_hi = quantile(diff, p = 1 - 0.00078125)) %>%
+  arrange(year, as.numeric(samples))
 
 
-### Generating a list of randomized accumulation curves
+diff_spat_byblock <- q0_spat %>%
+  select(-sitename, -dateestablished) %>%
+  pivot_longer(-c("site", "year", "fertilized", "block", "plot"),
+               names_to = "samples",
+               values_to = "diversity") %>%
+  mutate(samples = gsub("X", "", samples)) %>%
+  select(-plot) %>%
+  mutate(fertilized = if_else(fertilized == 0, 'unfert', 'fert')) %>%
+  pivot_wider(values_from = 'diversity',
+              names_from = 'fertilized') %>%
+  mutate(diff = log(fert) - log(unfert))
+
+diff_spat <- diff_spat_byblock %>%
+  group_by(year, samples) %>%
+  summarise(diff = mean(diff))
+  
+# Total deviance
+
+net_diff_summary %>%
+  ggplot(aes(x = as.numeric(samples),
+             y = diff_med)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = diff_lo,
+                  ymax = diff_hi)) + 
+  geom_line(data = diff_spat,
+            aes(y = diff),
+            color = "red") +
+  facet_wrap(~year)
+
+# Plotting
+toplot_byblock <- diff_spat_byblock %>% 
+  left_join(net_diff_byblock)
+
+toplot_byyear <- diff_spat %>%
+  left_join(net_diff_summary)
+
+# Net Effects Plot
+comp_plot <- toplot_byblock %>%
+  filter(year == 2019) %>%
+  ggplot(aes(x = log(as.numeric(samples)))) +
+  geom_ribbon(data = toplot_byyear %>% filter(year == 2019),
+            aes(ymin = diff_lo,
+                ymax = diff_hi),
+            alpha = .2,
+            color = 'black') +
+  geom_hline(yintercept = 0) +
+  geom_line(data = toplot_byyear %>% filter(year == 2019),
+            aes(y = diff_med),
+            color = "black",
+            linetype = 2,
+            size = 1.25) +
+  geom_line(data = toplot_byyear %>% filter(year == 2019),
+            aes(y = diff),
+            color = "black",
+            size = 1.25) +
+  geom_line(aes(y = diff,
+                color = site,
+                group = paste(site, block)),
+            alpha = .5) +
+  theme_bw() +
+  ylab("Log Response Ratio ") +
+  xlab("log(Number of Samples)") +
+  scale_color_manual(name = 'Site',
+                     values = c("#009E73", "orange3")) +
+  ggtitle("a) Richness Response - 2019")
+```
+
+```{r}
+# Net Effects Plot
+aggplot <- toplot_byblock %>%
+  filter(year == 2019) %>%
+  ggplot(aes(x = log(as.numeric(samples)))) +
+  geom_ribbon(data = toplot_byyear %>% filter(year == 2019),
+            aes(ymin = diff_lo - diff_med,
+                ymax = diff_hi - diff_med),
+            alpha = .2,
+            color = "black") +
+  geom_hline(yintercept = 0) +
+  geom_line(aes(y = diff - diff_med,
+                color = site,
+                group = paste(site, block)),
+            alpha = .5) +
+  geom_line(data = toplot_byyear %>% filter(year == 2019),
+            aes(y = diff - diff_med),
+            color = "black",
+            size = 1.25) +
+  theme_bw() +
+  ylab("Net Effect of Aggregation") +
+  xlab("log(Number of Samples)") +
+  scale_color_manual(name = 'Site',
+                     values = c("#009E73", "orange3")) +
+  ggtitle("b) Aggregation Effect - 2019")
+
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+mylegend<-g_legend(aggplot)
+
+p3 <- arrangeGrob(arrangeGrob(comp_plot + theme(legend.position="none"),
+                         aggplot + theme(legend.position="none"),
+                         nrow=1),
+             mylegend, nrow=1,widths =c(6, 1))
+
+ggsave("../Figures/Fig5_aggeffects.pdf",
+       p3,
+       height = 4,
+       width = 8)
+```
+
+```{r}
+comp2018 <- toplot_byblock %>%
+  filter(year == 2018) %>%
+  ggplot(aes(x = log(as.numeric(samples)))) +
+  geom_ribbon(data = toplot_byyear %>% filter(year == 2018),
+            aes(ymin = diff_lo,
+                ymax = diff_hi),
+            alpha = .2,
+            color = 'black') +
+  geom_hline(yintercept = 0) +
+  geom_line(data = toplot_byyear %>% filter(year == 2018),
+            aes(y = diff_med),
+            color = "black",
+            linetype = 2,
+            size = 1.25) +
+  geom_line(data = toplot_byyear %>% filter(year == 2018),
+            aes(y = diff),
+            color = "black",
+            size = 1.25) +
+  geom_line(aes(y = diff,
+                color = site,
+                group = paste(site, block)),
+            alpha = .5) +
+  theme_bw() +
+  ylab("Log Response Ratio ") +
+  xlab("log(Number of Samples)") +
+  scale_color_manual(name = 'Site',
+                     values = c("#009E73", "orange3")) +
+  ggtitle("a) Richness Response - 2018")
+
+
+comp2017 <- toplot_byblock %>%
+  filter(year == 2017) %>%
+  ggplot(aes(x = log(as.numeric(samples)))) +
+  geom_ribbon(data = toplot_byyear %>% filter(year == 2017),
+            aes(ymin = diff_lo,
+                ymax = diff_hi),
+            alpha = .2,
+            color = 'black') +
+  geom_hline(yintercept = 0) +
+  geom_line(data = toplot_byyear %>% filter(year == 2017),
+            aes(y = diff_med),
+            color = "black",
+            linetype = 2,
+            size = 1.25) +
+  geom_line(data = toplot_byyear %>% filter(year == 2017),
+            aes(y = diff),
+            color = "black",
+            size = 1.25) +
+  geom_line(aes(y = diff,
+                color = site,
+                group = paste(site, block)),
+            alpha = .5) +
+  theme_bw() +
+  ylab("Log Response Ratio ") +
+  xlab("log(Number of Samples)") +
+  scale_color_manual(name = 'Site',
+                     values = c("#009E73", "orange3")) +
+  ggtitle("a) Richness Response - 2017")
+
+agg2018 <- toplot_byblock %>%
+  filter(year == 2018) %>%
+  ggplot(aes(x = log(as.numeric(samples)))) +
+  geom_ribbon(data = toplot_byyear %>% filter(year == 2018),
+            aes(ymin = diff_lo - diff_med,
+                ymax = diff_hi - diff_med),
+            alpha = .2,
+            color = 'black') +
+  geom_line(aes(y = diff - diff_med,
+                color = site,
+                group = paste(site, block)),
+            alpha = .5) +
+  geom_line(data = toplot_byyear %>% filter(year == 2018),
+            aes(y = diff - diff_med),
+            color = "black",
+            size = 1.5) +
+  theme_bw() +
+  ylab("Net Effect of Aggregation") +
+  xlab("Number of Samples") +
+  scale_color_manual(name = 'Site',
+                     values = c("#009E73", "orange3")) +
+  ggtitle("b) Aggregation Effect - 2018")
+
+agg2017 <- toplot_byblock %>%
+  filter(year == 2017) %>%
+  ggplot(aes(x = log(as.numeric(samples)))) +
+  geom_ribbon(data = toplot_byyear %>% filter(year == 2017),
+            aes(ymin = diff_lo - diff_med,
+                ymax = diff_hi - diff_med),
+            alpha = .2,
+            color = 'black') +
+  geom_line(aes(y = diff - diff_med,
+                color = site,
+                group = paste(site, block)),
+            alpha = .5) +
+  geom_line(data = toplot_byyear %>% filter(year == 2017),
+            aes(y = diff - diff_med),
+            color = "black",
+            size = 1.5) +
+  theme_bw() +
+  ylab("Net Effect of Aggregation") +
+  xlab("Number of Samples") +
+  scale_color_manual(name = 'Site',
+                     values = c("#009E73", "orange3")) +
+  ggtitle("b) Aggregation Effect - 2017")
+
+
+
+p3 <- arrangeGrob(arrangeGrob(comp2018 + theme(legend.position="none"),
+                         agg2018 + theme(legend.position="none"),
+                         nrow=1),
+             mylegend, nrow=1,widths =c(6, 1))
+
+ggsave("../Figures/supp2018_aggeffects.pdf",
+       p3,
+       height = 4,
+       width = 8)
+
+
+p3 <- arrangeGrob(arrangeGrob(comp2017 + theme(legend.position="none"),
+                         agg2017 + theme(legend.position="none"),
+                         nrow=1),
+             mylegend, nrow=1,widths =c(6, 1))
+
+ggsave("../Figures/supp2017_aggeffects.pdf",
+       p3,
+       height = 4,
+       width = 8)
+```
+
+
+
+
+
+
+```{r}
+rand_forviz <- sitelabels %>% 
+  inner_join(q0_rand, by = c("plot" = "plotno", "site" = "site", "block" = "blockno")) %>%
+  select(-sitename, -dateestablished) %>%
+  pivot_longer(cols = - c('site', 'block', 'plot', 'fertilized', 'year', 'perm'),
+               names_to = 'samples') %>%
+  mutate(samples = gsub("X", "", samples)) %>%
+  select(-plot) %>%
+  mutate(fertilized = if_else(fertilized == 0, 'unfert', 'fert')) %>%
+  group_by(site, block, fertilized, year, samples) %>%
+  summarise(diversity = median(value),
+            diff_lo = quantile(value, p = 0.00078125),
+            diff_hi = quantile(value, p = 1 - 0.00078125)) %>%
+  arrange(site, block, year, fertilized, as.numeric(samples))
+
+spat_forviz <- q0_spat %>%
+  select(-sitename, -dateestablished) %>%
+  pivot_longer(-c("site", "year", "fertilized", "block", "plot"),
+               names_to = "samples", 
+               values_to = "diversity") %>%
+  mutate(samples = gsub("X", "", samples)) %>%
+  select(-plot) %>%
+  mutate(fertilized = if_else(fertilized == 0, 'unfert', 'fert'))
+
+ggplot(aes(x = log(as.numeric(samples)),
+           y = log(diversity),
+           color = fertilized),
+       data = rand_forviz %>% filter(year == 2019)) +
+  theme_bw() +
+  # geom_ribbon(data = rand_forviz %>% filter(year == 2019),
+  #             aes(ymin = log(diff_lo),
+  #                 ymax = log(diff_hi),
+  #                 fill = fertilized),
+  #             alpha = .2) +
+  geom_line(data = rand_forviz %>% filter(year == 2019),
+            linetype = 3, size = 1.25) +
+  geom_line(data = spat_forviz %>% filter(year == 2019),
+             size = 1.25) +
+  facet_grid(site ~ block) +
+  scale_color_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  scale_fill_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  ylab("Log(Species Richness)") +
+  xlab("Log(Number of Samples)") +
+  ggtitle("Spatial and Nonspatial Rarefaction - 2019")
+
+ggsave("../Figures/supp2019_rarecurves.pdf",
+       height = 4,
+       width = 8)
+
+ggplot(aes(x = log(as.numeric(samples)),
+           y = log(diversity),
+           color = fertilized),
+       data = rand_forviz %>% filter(year == 2018)) +
+  theme_bw() +
+  # geom_ribbon(data = rand_forviz %>% filter(year == 2018),
+  #             aes(ymin = log(diff_lo),
+  #                 ymax = log(diff_hi),
+  #                 fill = fertilized),
+  #             alpha = .2) +
+  geom_line(data = rand_forviz %>% filter(year == 2018),
+            linetype = 3, size = 1.25) +
+  geom_line(data = spat_forviz %>% filter(year == 2018),
+             size = 1.25) +
+  facet_grid(site ~ block) +
+  scale_color_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  scale_fill_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  ylab("Log(Species Richness)") +
+  xlab("Log(Number of Samples)") +
+  ggtitle("Spatial and Nonspatial Rarefaction - 2018")
+
+ggsave("../Figures/supp2018_rarecurves.pdf",
+       height = 4,
+       width = 8)
+
+ggplot(aes(x = log(as.numeric(samples)),
+           y = log(diversity),
+           color = fertilized),
+       data = rand_forviz %>% filter(year == 2017)) +
+  theme_bw() +
+  # geom_ribbon(data = rand_forviz %>% filter(year == 2017),
+  #             aes(ymin = log(diff_lo),
+  #                 ymax = log(diff_hi),
+  #                 fill = fertilized),
+  #             alpha = .2) +
+  geom_line(data = rand_forviz %>% filter(year == 2017),
+            linetype = 3, size = 1.25) +
+  geom_line(data = spat_forviz %>% filter(year == 2017),
+             size = 1.25) +
+  facet_grid(site ~ block) +
+  scale_color_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  scale_fill_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  ylab("Log(Species Richness)") +
+  xlab("Log(Number of Samples)") +
+  ggtitle("Spatial and Nonspatial Rarefaction - 2017")
+
+ggsave("../Figures/supp2017_rarecurves.pdf",
+       height = 4,
+       width = 8)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+q2_spat <- inner_join(sitelabels, q2_spat, by = c("plot" = "plotno", "site" = "site", "block" = "blockno"))
+
+q2_spat %>% group_by(year, fertilized) %>% summarise_if(is.numeric, mean) %>%
+  pivot_longer(-c("year", "fertilized", "block", "plot"),
+               names_to = "samp_effort",
+               values_to = "diversity") %>%
+  ggplot(aes(x = log(as.numeric(samp_effort)),
+             y = log(diversity),
+             color = as.factor(fertilized))) +
+  geom_line(size = 1.5) +
+  xlab("Log Sampling Effort") +
+  ylab("Log Inv. Simpson Diversity") +
+  scale_color_discrete(name = "Treatment", labels = c("Control", "Fert")) +
+  facet_wrap(~year) +
+  ggtitle("Scaling Relationships -- Inv. Simpson Div")
+
+ggsave("../Figures/accum_q2_2019.jpeg", height = 3, width = 6)
+```
+
+```{r}
+q0_rand <- inner_join(sitelabels, q0_rand, by = c("plot" = "plotno", "site" = "site", "block" = "blockno"))
+q0_rand$block <- as.factor(q0_rand$block)
+q0_rand$plot <- as.factor(q0_rand$plot)
+q0_rand$fertilized <- as.factor(q0_rand$fertilized)
+q0_perm_summary <- q0_rand %>% pivot_longer(-c("site", "sitename", "dateestablished", "block", "plot", "fertilized", "year", "permute_iter", "strata"),
+                         names_to = "effort",
+                         values_to = "diversity") %>%
+  select(-plot) %>%
+  pivot_wider(id_cols = c("site", "sitename", "dateestablished", "block", "year", "permute_iter", "strata", "effort"),
+              names_from = "fertilized",
+              names_prefix = "fert",
+              values_from = "diversity") %>%
+  mutate(diff = fert0 - fert1) %>%
+  select(-strata, -dateestablished)
+
+q0_quantiles_byblock <- q0_perm_summary %>%
+  group_by(site, block, year, effort) %>%
+  summarise(diff_lo = quantile(diff, probs = 0.025),
+            diff_mid = quantile(diff, probs = 0.75),
+            diff_hi = quantile(diff, probs = 0.975)) %>%
+  arrange(as.numeric(effort)) %>%
+  ungroup()
+
+q0_quantiles_byyear <- q0_quantiles_byblock %>%
+  select(-block) %>%
+  group_by(year, effort) %>%
+  summarise_if(is.numeric, mean)  %>%
+  arrange(year, as.numeric(effort))
+
+q0_quantiles_byyear %>%
+  ggplot(aes(x = as.numeric(effort))) +
+  geom_ribbon(aes(ymin = diff_lo - diff_mid,
+                  ymax = diff_hi - diff_mid)) +
+  facet_wrap(~year) +
+  geom_line(aes(x = as.numeric(effort),
+                y = as.numeric(diff) - diff_mid),
+            data = q0_spatvals)
+
+q0_spatvals <- q0_spat %>% group_by(year, fertilized) %>%
+  pivot_longer(-c("year", "fertilized", "block", "plot"),
+               names_to = "samp_effort",
+               values_to = "diversity") %>%
+  select(-plot, -block) %>%
+  mutate(fertilized = if_else(fertilized == 1, "fert", "unfert")) %>%
+  pivot_wider(names_from = fertilized,
+              values_from = diversity) %>%
+  mutate(diff = unfert - fert)
+```
+
+```{r}
+q0_spatvals <- q0_spat %>% pivot_longer(-c("site", "sitename", "dateestablished", "block", "plot", "fertilized", "year",  "strata"),
+                         names_to = "effort",
+                         values_to = "diversity") %>%
+  select(-plot) %>%
+  pivot_wider(id_cols = c("site", "sitename", "dateestablished", "block", "year", "strata", "effort"),
+              names_from = "fertilized",
+              names_prefix = "fert",
+              values_from = "diversity") %>%
+  mutate(diff = fert0 - fert1) %>%
+  select(-strata, -dateestablished) %>%
+  select(-block) %>%
+  group_by(year, effort) %>%
+  summarise_if(is.numeric, mean) %>%
+  arrange(year, as.numeric(effort))
+```
+
+

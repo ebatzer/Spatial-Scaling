@@ -72,24 +72,3 @@ permute_gamma <- function(species_abundance, treatment, q, strata = NULL, nperm 
   
   return(gamma_test)
 }
-
-
-################################################################################
-# TESTING
-################################################################################
-
-# Setting up some random groups in the dune data
-set.seed(0)
-rand_treatments <- sample(rep(1:2, 10), size = nrow(dune), replace = FALSE)
-
-# Estimating our value of t, the difference in mean gamma diversity
-treatment_gamma <- by(dune, rand_treatments, calculate_gamma_diversity, q = 1)
-treatment_gamma[1] - treatment_gamma[2]
-
-# Compare with function
-test_permutation <- permute_gamma(dune, treatment = rand_treatments, q = 1)
-
-# It'd also be good to do a quick visual check here with a histogram of our estimated values of t
-# Then an overlay of our T0 on top of that
-hist(test_permutation$t)
-abline(v = test_permutation$t0, col = "red")

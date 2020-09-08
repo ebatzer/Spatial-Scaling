@@ -3,9 +3,36 @@ title: "Biomass and Light Analysis"
 output: html_notebook
 ---
 
+```{r}
+library(tidyverse);library(lme4);library(lmerTest);library(emmeans);
+library(grid);library(gridExtra);library(boot)
+```
+
+
 # Reading in datasets
 
 ```{r}
+sitelabels <- read.csv(file = "../Data/FinalDatasets/Site_Descriptions.csv")
+head(sitelabels)
+
+bmass <- read.csv(file = "../Data/FinalDatasets/Biomass_Final.csv")
+head(bmass)
+
+light <- read.csv(file = "../Data/FinalDatasets/Light_Final.csv")
+head(light)
+
+# Filtering to SFREC and MCLA
+
+bmass <- bmass %>% filter(site != "HREC") %>%
+  left_join(sitelabels, on = list("site" = "site",
+                                  "block" = "block",
+                                  "plot" = "plot"))
+
+
+light <- light %>% filter(site != "HREC") %>%
+  left_join(sitelabels, on = list("site" = "site",
+                                  "block" = "block",
+                                  "plot" = "plot"))
 
 ```
 
@@ -23,26 +50,113 @@ Coefficient of variation of light availability
 
 ## Model fitting:
 
-Mixed model predicting light as a function of the years of treatment, with random effects accounting for the non-random effects of block and repeated observation of plot.
+Mixed model predicting light as a function of the years of treatment, with random effects accounting for the repeated measurements within each block
 
-$$Light = factor(Year_{trt}) + (1 | Block) + (1 | Block : Plot)$$
+$$Light = factor(Year) * factor(Treatment) + (1 | Block:Site)$$
 
 ```{r}
+colnames(light)
+
+mod_light_full <- lmer(Interception ~ as.factor(year) * as.factor(fertilized) + (1 | block:site) ,
+     data = light)
+
+mod_light_add <- lmer(Interception ~ as.factor(year) + as.factor(fertilized) + (1 | block:site),
+     data = light)
+
+anova(mod_light_full) # No significant deviations
+
+summary(mod_light_add)
+
+library(emmeans)
+emmeans(mod_light_full, pairwise ~ fertilized|year, adjust = "bonferroni", lmer.df = "satterthwaite")
 
 # Diagnostics
 
+plot(mod_light_add) # Check resid
+
+light[order(abs(resid(mod_light_add)), decreasing = TRUE),] # Check cell 480 in master datasheet
+
+bootfunction <- function(dat,i){
+  mod <- lmer(Interception ~ as.factor(year) * as.factor(fertilized) + (1 | block:site), data = dat[i,])
+  coefs <- fixef(mod)
+  return(c(coefs[1],
+         coefs[1] + coefs[4],
+         coefs[1] + coefs[2],
+         coefs[1] + coefs[2] + coefs[4] + coefs[5],
+         coefs[1] + coefs[3],
+         coefs[1] + coefs[3] + coefs[4] + coefs[6]))
+}
+
+fixef(mod_light_full)
+light_boots <- boot(light, statistic = bootfunction, R = 9999)
+
+bootcis <- data.frame(
+  matrix(
+    c(boot.ci(light_boots,type="perc", index = 1, conf = 1 - (.05 / 3))$percent[c(4,5)],
+      boot.ci(light_boots,type="perc", index = 2, conf = 1 - (.05 / 3))$percent[c(4,5)],
+      boot.ci(light_boots,type="perc", index = 3, conf = 1 - (.05 / 3))$percent[c(4,5)],
+      boot.ci(light_boots,type="perc", index = 4, conf = 1 - (.05 / 3))$percent[c(4,5)],
+      boot.ci(light_boots,type="perc", index = 5, conf = 1 - (.05 / 3))$percent[c(4,5)],
+      boot.ci(light_boots,type="perc", index = 6, conf = 1 - (.05 / 3))$percent[c(4,5)]),
+    ncol = 2, byrow = TRUE))
+
+colnames(bootcis) = c("low", "high")
+
 ```
 
-
-### Comparison with other model types:
-
-```{r}
-
-```
 
 ### Visualization of model fit
 
-Predicted means across all sites
+Net difference between 
+
+```{r}
+bygroup <- light %>%
+  group_by(year, site, block, fertilized) %>%
+  summarise(mean_int = mean(Interception),
+            se_interception = sd(Interception) / sqrt(n()))
+
+byyear <- light %>%
+  group_by(year, fertilized) %>%
+  summarise(mean_int = mean(Interception)) %>%
+  bind_cols(bootcis)
+```
+
+```{r}
+light_plot <- ggplot() +
+  geom_point(aes(x = as.factor(year),
+                 y = mean_int,
+                 fill = as.factor(fertilized)),
+             shape = 21,
+             data = bygroup,
+             alpha = .5,
+             size = 2,
+             position = position_dodge(width = .5)) +
+  geom_errorbar(aes(x = as.factor(year),
+                 ymin = low,
+                 ymax = high,
+                 color = as.factor(fertilized)),
+             data = byyear,
+             width = .1,
+             size = 1.2,
+             position = position_dodge(width = .5)) +
+  geom_point(aes(x = as.factor(year),
+                 y = mean_int,
+                 fill = as.factor(fertilized)),
+             shape = 21,
+             data = byyear,
+             size = 6,
+             position = position_dodge(width = .5)) +
+  ylab("Total PAR Intercepted (%)") +
+  xlab("Year") +
+  scale_fill_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  scale_color_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("black", "black")) +
+  ggtitle("b) Light Interception") +
+  theme_bw()
+```
 
 ---
 
@@ -63,24 +177,116 @@ Mixed model predicting biomass as a function of the years of treatment, with ran
 $$Biomass = factor(Year_{trt}) + (1 | Block)$$
 
 ```{r}
+head(bmass)
 
-# Diagnostics
+mod_bmass_full <- lmer(Total.Biomass ~ as.factor(year) * as.factor(fertilized) + (1 | site:block),
+             data = bmass)
 
-```
+mod_bmass_add <- lmer(Total.Biomass ~ as.factor(year) + as.factor(fertilized) + (1 | site:block),
+             data = bmass)
 
+anova(mod_bmass_full, mod_bmass_add)
 
-### Comparison with other model types:
+anova(mod_bmass_full)
 
-```{r}
+bootfunction <- function(dat,i){
+  mod <- lmer(Total.Biomass ~ as.factor(year) * as.factor(fertilized) + (1 | site:block), data = dat[i,])
+  coefs <- fixef(mod)
+  return(c(coefs[1],
+         coefs[1] + coefs[4],
+         coefs[1] + coefs[2],
+         coefs[1] + coefs[2] + coefs[4] + coefs[5],
+         coefs[1] + coefs[3],
+         coefs[1] + coefs[3] + coefs[4] + coefs[6]))
+}
+
+light_boots <- boot(bmass, statistic = bootfunction, R = 9999)
+
+bootcis <- data.frame(
+  matrix(
+    c(boot.ci(light_boots,type="perc", index = 1, conf = 1 - (.05 / 3))$percent[c(4,5)],
+      boot.ci(light_boots,type="perc", index = 2, conf = 1 - (.05 / 3))$percent[c(4,5)],
+      boot.ci(light_boots,type="perc", index = 3, conf = 1 - (.05 / 3))$percent[c(4,5)],
+      boot.ci(light_boots,type="perc", index = 4, conf = 1 - (.05 / 3))$percent[c(4,5)],
+      boot.ci(light_boots,type="perc", index = 5, conf = 1 - (.05 / 3))$percent[c(4,5)],
+      boot.ci(light_boots,type="perc", index = 6, conf = 1 - (.05 / 3))$percent[c(4,5)]),
+    ncol = 2, byrow = TRUE))
+
+colnames(bootcis) = c("low", "high")
 
 ```
 
 ### Visualization of model fit
 
-Predicted means across all sites
+```{r}
+bygroup <- bmass %>%
+  group_by(year, site, block, fertilized) %>%
+  summarise(mean_mass = mean(na.omit(Total.Biomass)),
+            se_mass = sd(na.omit(Total.Biomass)) / sqrt(n()))
 
+byyear <- bmass %>%
+  group_by(year, fertilized) %>%
+  summarise(mean_mass = mean(na.omit(Total.Biomass))) %>%
+  bind_cols(bootcis)
 
+bootfunction(bmass)
+byyear$mean_mass <- bootfunction(bmass)
+```
 
+```{r}
+bmass_plot <- ggplot() +
+  geom_point(aes(x = as.factor(year),
+                 y = mean_mass * 10,
+                 fill = as.factor(fertilized)),
+             shape = 21,
+             data = bygroup,
+             alpha = .5,
+             size = 2,
+             position = position_dodge(width = .5)) +
+      geom_errorbar(aes(x = as.factor(year),
+                 ymin = low * 10,
+                 ymax = high * 10,
+                 color = as.factor(fertilized)),
+             data = byyear,
+             width = .1,
+             size = 1.2,
+             position = position_dodge(width = .5)) +
+  geom_point(aes(x = as.factor(year),
+                 y = mean_mass * 10,
+                 fill = as.factor(fertilized)),
+             shape = 21,
+             data = byyear,
+             size = 6,
+             position = position_dodge(width = .5)) +
+  ylab("Total Biomass (g / m^2)") +
+  xlab("Year") +
+  scale_fill_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("#357EBDFF", "#D43F3AFF")) +
+  scale_color_manual(name = 'Treatment',
+                    labels = c('Control', '+N'),
+                    values = c("black", "black")) +
+  ggtitle("a) Biomass") +
+  theme_bw()
+```
 
+```{r}
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
 
+mylegend<-g_legend(bmass_plot)
+
+p3 <- arrangeGrob(arrangeGrob(bmass_plot + theme(legend.position="none"),
+                         light_plot + theme(legend.position="none"),
+                         nrow=1),
+             mylegend, nrow=1,widths =c(6, 1))
+
+ggsave("../Figures/Fig2_lightprod.pdf",
+       p3,
+       height = 4.5,
+       width = 8)
+```
 

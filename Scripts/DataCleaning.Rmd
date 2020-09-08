@@ -1,0 +1,99 @@
+---
+title: "Data Checking"
+author: "Evan Batzer"
+date: "March 28, 2020"
+output: html_document
+---
+```{r}
+library(tidyverse)
+
+com_data  <- read.csv("../Data/FinalDatasets/Community_Final.csv")
+
+# com_data <- com_data %>% select(-"index")
+
+idcols <- c("site", "blockno", "plotno", "subplotno", "subplotx", "subploty", "year", "index")
+
+com_data <- com_data %>% filter(site %in% c("SFREC", "MCLA"))
+
+com_att <- com_data %>% dplyr::select(all_of(idcols))
+
+com_mat <- com_data %>% dplyr::select(-one_of(idcols))
+
+dim(com_att)
+dim(com_mat)
+```
+
+### Summarizing to find patterns in abundance, odd species, etc.
+
+Best here will be to write a separate dataset for each of the different sites, then attempt to standardize over each separately.
+
+Should:
+  Subset to block within sites
+  Remove all columns where no species are recorded
+  Output a new dataframe
+  
+Then:
+  Collect and collapse dataframes together
+  
+\check Done
+
+```{r}
+sites <- unique(com_att$site)
+blocks <- unique(com_att$blockno)
+
+for(sitename in sites){
+  for(blockid in blocks){
+   
+  com_subset <- com_mat[com_att$site == sitename & com_att$blockno == blockid,]
+  att_subset <- com_att[com_att$site == sitename & com_att$blockno == blockid,c(1,2,3,7)]
+  com_subset <- com_subset[,colSums(com_subset) > 0]
+  
+  testthat::expect_equal(nrow(att_subset), nrow(com_subset))
+  
+  # write.csv(x = cbind(att_subset, com_subset),
+  #           file = paste("../Data/CheckMat_",sitename,blockid,".csv", sep = ""))    
+  
+  colsummary <- cbind(att_subset, com_subset) %>%
+    group_by(site, year, blockno, plotno) %>%
+    summarise_if(is.numeric, sum) %>%
+    pivot_longer(cols = -one_of(c('site', 'year', 'blockno', 'plotno')),
+                 names_to = "species", values_to = "cover") %>%
+    arrange(species, year, plotno)
+  
+  # write.csv(x = colsummary,
+  #           file = paste("../Data/CheckCols_",sitename,blockid,".csv", sep = ""))    
+  }
+}
+```
+
+# Re-joining fixed datasets
+
+```{r}
+rm(newdf)
+
+for(sitename in sites){
+  for(blockid in blocks){
+    
+    filename <- paste("../Data/DataChecking/CheckMat_",sitename,blockid,"_fixed.csv", sep = "")    
+    cat(paste(sitename, blockid))
+    if(!exists("newdf")){
+      newdf <- read_csv(filename)
+      colnames(newdf)[1] <- "index"
+      cat(sort(colnames(newdf)))
+    }else{
+      tempdf <- read_csv(filename)
+      colnames(tempdf)[1] <- "index"
+      newdf <- bind_rows(newdf, tempdf)
+      cat(sort(colnames(tempdf)))
+
+    }  
+  }
+}
+
+finalmat <- newdf[,c(1:5, 5 + order(colnames(newdf)[6:ncol(newdf)]))]
+finalmat[is.na(finalmat)] <- 0
+finalmat <- finalmat %>% arrange(index)
+
+write.csv(x = cbind(com_att %>% arrange(index), finalmat[,-c(1:5)]),        
+          file = "../Data/finalmat_draft.csv")
+```
